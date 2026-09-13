@@ -1,0 +1,12 @@
+# GPS ENU converter settings
+origin_mode: auto          # auto | manual
+origin_lat: 0.0
+origin_lon: 0.0
+origin_alt: 0.0
+
+fix_topic: /gps/fix
+pose_topic: /open_nav/pose
+map_frame: open_map
+gps_frame: gps_link
+
+publish_tf: true

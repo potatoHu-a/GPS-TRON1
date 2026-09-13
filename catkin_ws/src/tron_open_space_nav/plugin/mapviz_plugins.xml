@@ -1,0 +1,7 @@
+<library path="libtron_open_space_nav_mapviz_plugins">
+  <class name="tron_open_space_nav/OpenNavMissionPanel"
+         type="tron_open_space_nav::OpenNavMissionPanel"
+         base_class_type="mapviz::MapvizPlugin">
+    <description>OpenNav Mission Panel — waypoint list and patrol control</description>
+  </class>
+</library>

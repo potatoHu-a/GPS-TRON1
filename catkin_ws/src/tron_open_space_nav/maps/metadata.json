@@ -1,0 +1,10 @@
+{
+    "format": "png",
+    "name": "wuhan_test",
+    "description": "wuhan_test",
+    "version": "1.1",
+    "type": "overlay",
+    "minzoom": "12",
+    "maxzoom": "18",
+    "bounds": "114.355,30.5465,114.357,30.5478"
+}

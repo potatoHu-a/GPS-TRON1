@@ -1,0 +1,3 @@
+# Offline tile server for Mapviz ground station
+tile_port: 8088
+tile_root: ""

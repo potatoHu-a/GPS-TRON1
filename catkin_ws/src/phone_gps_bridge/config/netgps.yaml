@@ -1,0 +1,7 @@
+host: 172.18.125.125
+port: 10110
+reconnect_interval: 2.0
+connect_timeout: 5.0
+receive_timeout: 5.0
+publish_magnetic_heading: true
+validate_checksum: true

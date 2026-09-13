@@ -1,0 +1,40 @@
+<launch>
+  <!-- Full closed-loop simulation: GPS -> fusion -> Pure Pursuit -> avoid -> dry_run control -->
+
+  <node pkg="phone_gps_bridge" type="gps_udp_receiver.py" name="gps_udp_receiver" output="screen">
+    <param name="debug" value="false"/>
+  </node>
+
+  <node pkg="phone_gps_bridge" type="fake_phone_gps.py" name="fake_phone_gps" output="screen"/>
+
+  <node pkg="tron_open_space_nav" type="gps_enu_converter.py" name="gps_enu_converter" output="screen">
+    <rosparam file="$(find tron_open_space_nav)/config/gps.yaml" command="load"/>
+  </node>
+
+  <node pkg="tron_open_space_nav" type="fake_fastlio_odom.py" name="fake_fastlio_odom" output="screen">
+    <param name="frame_id" value="open_odom"/>
+    <param name="child_frame_id" value="open_base"/>
+    <param name="radius" value="5.0"/>
+    <param name="linear_speed" value="0.35"/>
+    <param name="rate" value="20.0"/>
+  </node>
+
+  <node pkg="tron_open_space_nav" type="gps_fastlio_fusion.py" name="gps_fastlio_fusion" output="screen">
+    <rosparam file="$(find tron_open_space_nav)/config/fusion.yaml" command="load"/>
+  </node>
+
+  <node pkg="tron_open_space_nav" type="waypoint_tracker.py" name="waypoint_tracker" output="screen">
+    <rosparam file="$(find tron_open_space_nav)/config/waypoint.yaml" command="load"/>
+  </node>
+
+  <node pkg="tron_open_space_nav" type="lidar_obstacle_avoid.py" name="lidar_obstacle_avoid" output="screen">
+    <rosparam file="$(find tron_open_space_nav)/config/obstacle.yaml" command="load"/>
+  </node>
+
+  <node pkg="tron_open_space_nav" type="nav_mode_manager.py" name="nav_mode_manager" output="screen"/>
+
+  <node pkg="tron_open_space_nav" type="tron_controller_bridge.py" name="tron_controller_bridge" output="screen">
+    <rosparam file="$(find tron_open_space_nav)/config/controller.yaml" command="load"/>
+    <param name="dry_run" value="true"/>
+  </node>
+</launch>

@@ -1,0 +1,19 @@
+<launch>
+  <!-- GPS UDP receiver -->
+  <node pkg="phone_gps_bridge" type="gps_udp_receiver.py" name="gps_udp_receiver" output="screen">
+    <param name="port" value="10110"/>
+    <param name="frame_id" value="gps_link"/>
+    <param name="publish_rate" value="5.0"/>
+    <param name="debug" value="true"/>
+  </node>
+
+  <!-- Local ENU track recorder -->
+  <node pkg="phone_gps_bridge" type="gps_track_recorder.py" name="gps_track_recorder" output="screen"/>
+
+  <!-- Path and marker for RViz -->
+  <node pkg="phone_gps_bridge" type="gps_path_publisher.py" name="gps_path_publisher" output="screen"/>
+
+  <!-- Static TF: gps_local -> gps_link -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="gps_local_to_gps_link"
+        args="0 0 0 0 0 0 gps_local gps_link"/>
+</launch>

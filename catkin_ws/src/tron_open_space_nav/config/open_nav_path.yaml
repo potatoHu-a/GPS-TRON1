@@ -1,0 +1,5 @@
+# /open_nav/odom -> /open_nav/path (map frame, for Mapviz)
+odom_topic: /open_nav/odom
+path_topic: /open_nav/path
+map_frame: map
+max_points: 5000

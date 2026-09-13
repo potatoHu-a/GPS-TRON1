@@ -1,0 +1,5 @@
+# Mapviz local_xy_origin publisher (no TF)
+map_frame: map
+origin_topic: /local_xy_origin
+fix_topic: /gps/fix
+allow_gps_fallback: true

@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>tron_open_space_nav</name>
+  <version>0.2.0</version>
+  <description>Outdoor GPS navigation for TRON1: true-north ENU, multi-waypoint Pure Pursuit, LiDAR avoidance</description>
+
+  <maintainer email="user@todo.todo">user</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>message_generation</build_depend>
+  <exec_depend>message_runtime</exec_depend>
+
+  <depend>roscpp</depend>
+  <depend>rospy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+
+  <build_depend>qtbase5-dev</build_depend>
+  <build_depend>libqt5-core</build_depend>
+  <build_depend>libqt5-widgets</build_depend>
+  <build_depend>mapviz</build_depend>
+  <build_depend>mapviz_plugins</build_depend>
+  <build_depend>pluginlib</build_depend>
+  <build_depend>swri_transform_util</build_depend>
+  <build_depend>swri_yaml_util</build_depend>
+
+  <exec_depend>mapviz</exec_depend>
+  <exec_depend>pluginlib</exec_depend>
+
+  <export>
+    <mapviz plugin="${prefix}/plugin/mapviz_plugins.xml"/>
+  </export>
+</package>

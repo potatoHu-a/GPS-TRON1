@@ -1,0 +1,116 @@
+capture_directory: "~"
+fixed_frame: map
+target_frame: open_base
+fix_orientation: false
+rotate_90: false
+enable_antialiasing: true
+show_displays: true
+show_status_bar: true
+show_capture_tools: true
+window_width: 1600
+window_height: 900
+view_scale: 1.0
+offset_x: 0
+offset_y: 0
+use_latest_transforms: true
+background: "#a0a0a4"
+image_transport: raw
+displays:
+  - type: mapviz_plugins/tile_map
+    name: TileMap
+    config:
+      visible: true
+      collapsed: false
+      custom_sources:
+        - base_url: file:///root/catkin_ws/src/tron_open_space_nav/maps/wuhan_tiles/{level}/{x}/{y}.png
+          max_zoom: 18
+          name: OfflineTiles
+          type: wmts
+      bing_api_key: ""
+      stadia_api_key: ""
+      source: OfflineTiles
+  - type: mapviz_plugins/navsat
+    name: GPS
+    config:
+      visible: true
+      collapsed: false
+      topic: /gps/fix
+      color: "#00ff00"
+  - type: mapviz_plugins/pose
+    name: GpsFilteredPose
+    config:
+      visible: true
+      collapsed: false
+      topic: /open_nav/gps_filtered_pose
+      color: "#00ffff"
+      draw_style: points
+      position_tolerance: 0.0
+      buffer_size: 200
+      draw_style: points
+      position_tolerance: 0.0
+      buffer_size: 500
+  - type: mapviz_plugins/path
+    name: OpenNavPath
+    config:
+      visible: true
+      collapsed: false
+      topic: /open_nav/path
+      color: "#ffff00"
+      draw_style: lines
+      position_tolerance: 0.0
+      buffer_size: 0
+  - type: mapviz_plugins/odometry
+    name: OpenNavOdom
+    config:
+      visible: true
+      collapsed: false
+      topic: /open_nav/odom
+      color: "#ff0000"
+      draw_style: arrows
+      position_tolerance: 0.0
+      buffer_size: 200
+      show_laps: false
+      show_covariance: false
+      show_all_covariances: false
+      static_arrow_sizes: false
+      arrow_size: 25
+  - type: mapviz_plugins/path
+    name: MissionPath
+    config:
+      visible: true
+      collapsed: false
+      topic: /open_nav/mission_path
+      color: "#33ccff"
+      draw_style: lines
+      position_tolerance: 0.0
+      buffer_size: 0
+  - type: mapviz_plugins/marker
+    name: WaypointMarkers
+    config:
+      visible: true
+      collapsed: false
+      topic: /open_nav/waypoint_markers
+  - type: tron_open_space_nav/OpenNavMissionPanel
+    name: OpenNav Mission Panel
+    config:
+      visible: true
+      collapsed: false
+  - type: mapviz_plugins/point_click_publisher
+    name: WaypointClick
+    config:
+      visible: true
+      collapsed: false
+      topic: /mapviz/waypoint_click
+      output_frame: map
+  - type: mapviz_plugins/tf_frame
+    name: RobotTF
+    config:
+      visible: true
+      collapsed: false
+      frame: open_base
+      color: "#00aaff"
+      draw_style: arrows
+      position_tolerance: 0.0
+      buffer_size: 1
+      static_arrow_sizes: true
+      arrow_size: 40

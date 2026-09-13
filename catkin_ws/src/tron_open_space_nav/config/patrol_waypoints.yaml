@@ -1,0 +1,4 @@
+frame_id: map
+patrol_mode: once
+loop_count: 0
+waypoints: []

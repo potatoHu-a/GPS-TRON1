@@ -1,0 +1,31 @@
+# ROS / catkin generated files
+catkin_ws/build/
+catkin_ws/build_isolated/
+catkin_ws/devel/
+catkin_ws/devel_isolated/
+catkin_ws/install/
+catkin_ws/install_isolated/
+catkin_ws/log/
+
+# Python generated files
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Runtime logs and recordings
+*.log
+*.bag
+*.active
+*.pcd
+
+# Archives generated during handoff/debug
+*.tar
+*.tar.gz
+*.zip
+
+# Local editor/system files
+.vscode/
+.idea/
+*~
+.DS_Store
+

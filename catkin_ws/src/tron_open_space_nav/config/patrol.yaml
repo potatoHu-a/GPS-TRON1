@@ -1,0 +1,11 @@
+# patrol_mission_manager
+map_frame: map
+patrol_mode: once
+loop_count: 0
+save_path: patrol_waypoints.yaml
+navigate_enable_topic: /open_nav/mission/navigate_enable
+cmd_vel_topic: /open_nav/cmd_vel_raw
+tracker_status_topic: /open_nav/tracker_status
+collector_send_service: /gps_multi_waypoint_collector/confirm_mission
+collector_clear_service: /gps_multi_waypoint_collector/clear
+collector_save_service: /gps_multi_waypoint_collector/save

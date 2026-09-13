@@ -1,0 +1,4 @@
+# localization_diagnostics
+report_interval: 1.0
+gps_distance_deadband: 1.0
+measured_distance: 0.0

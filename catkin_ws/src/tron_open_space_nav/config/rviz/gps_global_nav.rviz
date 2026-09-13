@@ -1,0 +1,61 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+  - Class: rviz/Views
+    Name: Views
+Visualization Manager:
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 5
+      Class: rviz/Grid
+      Enabled: true
+      Name: Grid
+      Reference Frame: map
+    - Class: rviz/TF
+      Enabled: true
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+    - Class: rviz/Pose
+      Enabled: true
+      Name: GlobalPose
+      Topic: /global_pose
+    - Class: rviz/Odometry
+      Enabled: true
+      Name: OpenNavOdom
+      Topic: /open_nav/odom
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Name: WaypointMarkers
+      Topic: /open_nav/waypoint_markers
+    - Class: rviz/Path
+      Enabled: true
+      Name: GPSPath
+      Topic: /gps/path
+  Global Options:
+    Fixed Frame: map
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+    - Class: rviz/FocusCamera
+    - Class: rviz/Measure
+    - Class: rviz/SetInitialPose
+      Topic: /initialpose
+    - Class: rviz/SetGoal
+      Topic: /open_nav/goal_add
+    - Class: rviz/PublishPoint
+      Topic: /clicked_point
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 80
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Name: Current View
+      Pitch: 0.785
+      Yaw: 0.785

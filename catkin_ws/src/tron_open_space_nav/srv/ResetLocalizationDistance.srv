@@ -1,0 +1,4 @@
+# Reset all cumulative distance counters in localization_diagnostics
+---
+bool success
+string message

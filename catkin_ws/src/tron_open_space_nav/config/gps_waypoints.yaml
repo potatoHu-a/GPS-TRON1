@@ -1,0 +1,4 @@
+# GPS waypoints for outdoor navigation (lat/lon in WGS84 degrees).
+# Populated by RViz 2D Nav Goal clicks via gps_waypoint_collector,
+# or edit manually.
+waypoints: []

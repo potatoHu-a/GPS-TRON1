@@ -1,0 +1,26 @@
+# Pure Pursuit on global ``map`` frame (true-north ENU)
+odom_topic: /open_nav/odom
+cmd_vel_topic: /open_nav/cmd_vel_raw
+
+map_frame: map
+loop: false
+debug: true
+
+lookahead_distance: 2.0
+goal_tolerance: 1.0
+min_linear_vel: 0.4
+max_linear_vel: 0.5
+max_angular_vel: 0.4
+control_rate: 20.0
+
+use_map_waypoints: false
+
+# single_goal  -> /move_base_simple/goal (one point)
+# multi_goal   -> /open_nav/waypoints (P1->P2->P3 sequential)
+# manual_yaml  -> config/gps_waypoints.yaml
+waypoint_source: multi_goal
+single_goal_topic: /move_base_simple/goal
+waypoints_topic: /open_nav/tracker_waypoints
+mission_status_topic: /open_nav/tracker_status
+
+waypoints: []

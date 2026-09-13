@@ -1,0 +1,21 @@
+# gps_global_converter: WGS84 -> true-north ENU in ``map`` frame
+fix_topic: /gps/fix
+pose_topic: /global_pose
+raw_pose_topic: /open_nav/gps_raw_pose
+filtered_pose_topic: /open_nav/gps_filtered_pose
+earth_frame: earth
+map_frame: map
+origin_mode: auto
+origin_lat: 0.0
+origin_lon: 0.0
+origin_alt: 0.0
+origin_samples: 20
+origin_outlier_m: 15.0
+publish_tf: true
+use_utm: false
+
+# GPS quality gate + light EMA (does not compress long-term scale)
+gps_max_sigma: 8.0
+gps_max_speed: 3.0
+gps_ema_alpha: 0.3
+enable_gps_filter: true

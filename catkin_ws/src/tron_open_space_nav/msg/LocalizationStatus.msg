@@ -1,0 +1,33 @@
+# Outdoor localization diagnostics (distances since last reset)
+std_msgs/Header header
+float32 gps_sigma
+bool gps_fix_valid
+uint32 gps_rejected_count
+float32 gps_raw_distance
+float32 gps_filtered_distance
+float32 global_pose_distance
+float32 fastlio_distance
+float32 open_nav_distance
+float32 gps_correction_offset_x
+float32 gps_correction_offset_y
+float32 ratio_global_gps
+float32 ratio_fastlio_gps
+float32 ratio_open_nav_gps
+float32 measured_distance
+string note
+# Net displacement from reset origin (preferred for straight-line tests)
+float32 gps_raw_displacement
+float32 gps_filtered_displacement
+float32 global_pose_displacement
+float32 fastlio_displacement
+float32 open_nav_displacement
+float32 gps_deadband_distance
+float32 gps_correction_distance
+float32 fastlio_motion_distance
+float32 open_nav_path_distance
+float32 fastlio_dx
+float32 fastlio_dy
+float32 global_dx
+float32 global_dy
+float32 open_nav_dx
+float32 open_nav_dy

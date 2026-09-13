@@ -1,0 +1,4 @@
+# Copy to robot.yaml and edit only if your TRON1 controller differs.
+# Loaded by launch files into tron_controller_bridge.
+ws_url: "ws://10.192.1.2:5000"
+accid: "WF_TRON1A_412"

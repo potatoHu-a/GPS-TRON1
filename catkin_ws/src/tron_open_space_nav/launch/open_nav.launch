@@ -1,0 +1,58 @@
+<launch>
+  <!--
+    Independent open-space navigation stack (does NOT touch official map/move_base).
+    stage: gps | fusion | waypoint | sim | full
+  -->
+  <arg name="stage" default="full"/>
+  <arg name="dry_run" default="true"/>
+  <arg name="use_fake_gps" default="false"/>
+  <arg name="use_fake_fastlio" default="false"/>
+  <arg name="fusion_config" default="$(find tron_open_space_nav)/config/fusion.yaml"/>
+  <arg name="waypoint_config" default="$(find tron_open_space_nav)/config/waypoint.yaml"/>
+  <arg name="obstacle_config" default="$(find tron_open_space_nav)/config/obstacle_avoid.yaml"/>
+  <arg name="robot_config" default=""/>
+  <arg name="robot_ws_url" default="ws://10.192.1.2:5000"/>
+  <arg name="robot_accid" default="WF_TRON1A_412"/>
+  <arg name="waypoint_source" default=""/>
+
+  <group if="$(arg use_fake_gps)">
+    <node pkg="phone_gps_bridge" type="gps_udp_receiver.py" name="gps_udp_receiver" output="screen">
+      <param name="debug" value="false"/>
+    </node>
+    <node pkg="phone_gps_bridge" type="fake_phone_gps.py" name="fake_phone_gps" output="screen"/>
+  </group>
+
+  <node pkg="tron_open_space_nav" type="gps_enu_converter.py" name="gps_enu_converter" output="screen">
+    <rosparam file="$(find tron_open_space_nav)/config/gps.yaml" command="load"/>
+  </node>
+
+  <group if="$(eval stage == 'fusion' or stage == 'waypoint' or stage == 'sim' or stage == 'full')">
+    <group if="$(arg use_fake_fastlio)">
+      <node pkg="tron_open_space_nav" type="fake_fastlio_odom.py" name="fake_fastlio_odom" output="screen">
+        <param name="frame_id" value="open_odom"/>
+        <param name="child_frame_id" value="open_base"/>
+      </node>
+    </group>
+    <node pkg="tron_open_space_nav" type="gps_fastlio_fusion.py" name="gps_fastlio_fusion" output="screen">
+      <rosparam file="$(arg fusion_config)" command="load"/>
+    </node>
+  </group>
+
+  <group if="$(eval stage == 'waypoint' or stage == 'sim' or stage == 'full')">
+    <node pkg="tron_open_space_nav" type="waypoint_tracker.py" name="waypoint_tracker" output="screen">
+      <rosparam file="$(arg waypoint_config)" command="load"/>
+      <param if="$(eval waypoint_source != '')" name="waypoint_source" value="$(arg waypoint_source)"/>
+    </node>
+    <node pkg="tron_open_space_nav" type="lidar_obstacle_avoid.py" name="lidar_obstacle_avoid" output="screen">
+      <rosparam file="$(arg obstacle_config)" command="load"/>
+    </node>
+    <node pkg="tron_open_space_nav" type="nav_mode_manager.py" name="nav_mode_manager" output="screen"/>
+    <node pkg="tron_open_space_nav" type="tron_controller_bridge.py" name="tron_controller_bridge" output="screen">
+      <rosparam file="$(find tron_open_space_nav)/config/controller.yaml" command="load"/>
+      <rosparam if="$(eval robot_config != '')" file="$(arg robot_config)" command="load"/>
+      <param name="ws_url" value="$(arg robot_ws_url)"/>
+      <param name="accid" value="$(arg robot_accid)"/>
+      <param name="dry_run" value="$(arg dry_run)"/>
+    </node>
+  </group>
+</launch>

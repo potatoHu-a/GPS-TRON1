@@ -1,0 +1,4 @@
+# gps_waypoint_collector (single goal)
+map_frame: map
+goal_topic: /move_base_simple/goal
+auto_save: false

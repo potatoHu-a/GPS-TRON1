@@ -1,0 +1,65 @@
+<launch>
+  <!--
+    Mapviz ground station (dev PC / Docker with DISPLAY).
+    Connects to robot ROS master; does NOT start navigation nodes.
+
+    Example:
+      export ROS_MASTER_URI=http://ROBOT_IP:11311
+      export ROS_IP=DEV_PC_IP
+      roslaunch tron_open_space_nav mapviz_ground_station.launch \
+        tile_root:=/path/to/tiles launch_mapviz:=true
+  -->
+  <arg name="launch_mapviz" default="false"/>
+  <arg name="tile_port" default="8088"/>
+  <arg name="tile_root" default=""/>
+
+  <!-- Official swri WGS84 / LocalXY origin (latched /local_xy_origin + map->map__identity TF) -->
+  <arg name="local_xy_origin" default="auto"/>
+  <arg name="origin_lat" default="0.0"/>
+  <arg name="origin_lon" default="0.0"/>
+  <arg name="origin_alt" default="0.0"/>
+  <arg name="use_origin_fallback" default="false"/>
+
+  <node pkg="swri_transform_util" type="initialize_origin.py" name="mapviz_initialize_origin"
+        output="screen" unless="$(arg use_origin_fallback)">
+    <rosparam file="$(find tron_open_space_nav)/config/mapviz_initialize_origin.yaml" command="load"/>
+    <param name="local_xy_origin" value="$(arg local_xy_origin)"/>
+    <rosparam unless="$(eval arg('local_xy_origin') == 'auto')" param="local_xy_origins">
+      [{name: $(arg local_xy_origin),
+        latitude: $(arg origin_lat),
+        longitude: $(arg origin_lon),
+        altitude: $(arg origin_alt),
+        heading: 0.0}]
+    </rosparam>
+  </node>
+
+  <!-- Fallback only when swri_transform_util is unavailable -->
+  <node pkg="tron_open_space_nav" type="mapviz_tf_broadcaster.py" name="mapviz_origin_publisher"
+        output="screen" if="$(arg use_origin_fallback)">
+    <rosparam file="$(find tron_open_space_nav)/config/mapviz_origin.yaml" command="load"/>
+  </node>
+
+  <!-- Offline XYZ tile HTTP server: http://127.0.0.1:8088/{z}/{x}/{y}.png -->
+  <node pkg="tron_open_space_nav" type="tile_http_server.py" name="tile_http_server" output="screen">
+    <param name="port" value="$(arg tile_port)"/>
+    <param name="tile_root" value="$(arg tile_root)"/>
+  </node>
+
+  <!-- map-frame path from fused odometry (replaces /gps/path in gps_local) -->
+  <node pkg="tron_open_space_nav" type="open_nav_path_publisher.py" name="open_nav_path_publisher"
+        output="screen">
+    <rosparam file="$(find tron_open_space_nav)/config/open_nav_path.yaml" command="load"/>
+  </node>
+
+  <!-- Mapviz click -> /open_nav/goal_add (accumulate waypoints on robot collector) -->
+  <node pkg="tron_open_space_nav" type="mapviz_click_to_goal.py" name="mapviz_click_to_goal"
+        output="screen"/>
+
+  <group if="$(arg launch_mapviz)">
+    <node pkg="tron_open_space_nav" type="start_mapviz_when_ready.py"
+          name="mapviz_launcher" output="screen">
+      <rosparam file="$(find tron_open_space_nav)/config/mapviz_launcher.yaml" command="load"/>
+      <param name="config_path" value="$(find tron_open_space_nav)/config/rviz/mapviz.mvc"/>
+    </node>
+  </group>
+</launch>

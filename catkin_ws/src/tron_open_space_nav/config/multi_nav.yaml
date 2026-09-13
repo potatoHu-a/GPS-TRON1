@@ -1,0 +1,10 @@
+# gps_multi_waypoint_collector
+map_frame: map
+mission_topic: /multi_navi_goals/mission
+mission_path_topic: /open_nav/mission_path
+waypoints_topic: /open_nav/waypoints
+tracker_waypoints_topic: /open_nav/tracker_waypoints
+accumulate_topic: /open_nav/goal_add
+auto_save_waypoints: false
+auto_load_waypoints: false
+duplicate_click_distance: 0.3

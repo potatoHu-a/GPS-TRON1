@@ -1,0 +1,3 @@
+# Robot-specific TRON1 WebSocket settings.
+ws_url: "ws://10.192.1.2:5000"
+accid: "WF_TRON1A_412"

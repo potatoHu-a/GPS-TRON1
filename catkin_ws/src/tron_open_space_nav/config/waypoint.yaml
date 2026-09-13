@@ -1,0 +1,30 @@
+# Pure Pursuit waypoint tracker (legacy open_map mode)
+# Global outdoor nav: use gps_global_nav.launch + global_waypoint.yaml
+waypoint_source: manual_yaml
+odom_topic: /open_nav/odom
+cmd_vel_topic: /open_nav/cmd_vel_raw
+
+map_frame: open_map
+loop: true
+debug: true
+
+lookahead_distance: 1.0
+goal_tolerance: 0.5
+max_linear_vel: 0.3
+max_angular_vel: 0.4
+control_rate: 20.0
+
+# Simulation: use open_map meter coordinates (matches fake_fastlio 5m circle)
+use_map_waypoints: true
+map_waypoints:
+  - {x: 5.0, y: 0.0}
+  - {x: 0.0, y: 5.0}
+  - {x: -5.0, y: 0.0}
+  - {x: 0.0, y: -5.0}
+
+# Real robot: set use_map_waypoints=false and fill GPS waypoints
+waypoints:
+  - {lat: 30.530000, lon: 114.360000}
+  - {lat: 30.530050, lon: 114.360100}
+  - {lat: 30.530000, lon: 114.360200}
+  - {lat: 30.529950, lon: 114.360100}

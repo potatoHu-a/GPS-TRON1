@@ -1,0 +1,42 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+  - Class: rviz/Views
+    Name: Views
+Visualization Manager:
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz/Grid
+      Enabled: true
+      Name: Grid
+      Reference Frame: open_map
+    - Class: rviz/TF
+      Enabled: true
+      Name: TF
+    - Class: rviz/Pose
+      Enabled: true
+      Name: OpenNavPose
+      Topic: /open_nav/pose
+    - Class: rviz/Odometry
+      Enabled: true
+      Name: OpenNavOdom
+      Topic: /open_nav/odom
+    - Class: rviz/Path
+      Enabled: true
+      Name: GPSPath
+      Topic: /gps/path
+  Global Options:
+    Fixed Frame: open_map
+  Name: root
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 20
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Name: Current View
+      Pitch: 0.7
+      Yaw: 0.7

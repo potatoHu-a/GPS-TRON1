@@ -1,0 +1,48 @@
+# Enhanced LiDAR obstacle avoidance (no costmap, no move_base).
+input_cmd_topic: /open_nav/cmd_vel_raw
+output_cmd_topic: /open_nav/cmd_vel
+status_topic: /open_nav/obstacle_status
+marker_topic: /open_nav/obstacle_markers
+nav_mode_topic: /open_nav/nav_mode
+
+pointcloud_topic: /livox/lidar
+scan_topic: /scan
+use_scan: false
+
+map_frame: open_map
+base_frame: open_base
+
+# All ROI limits are evaluated after TF conversion into base_frame.
+# Assumption in base_frame: +X forward, +Y left, +Z up.
+robot_width: 0.70
+safety_margin: 0.15
+side_region_width: 0.55
+
+roi_min_x: 0.15
+roi_max_x: 4.0
+roi_min_y: -1.40
+roi_max_y: 1.40
+roi_min_z: -0.35
+roi_max_z: 1.40
+ground_z_max: 0.08
+
+check_min_range: 0.25
+check_max_range: 4.0
+slow_distance: 2.0
+stop_distance: 0.8
+slowdown_factor: 0.35
+
+min_points: 5
+confirm_frames: 2
+clear_frames: 3
+direction_hold_time: 1.5
+switch_margin: 0.35
+
+avoid_linear_scale: 0.65
+avoid_angular_vel: 0.28
+min_effective_linear_vel: 0.25
+max_output_angular_vel: 0.4
+
+pointcloud_timeout: 0.8
+fail_safe_stop: true
+debug_markers: true

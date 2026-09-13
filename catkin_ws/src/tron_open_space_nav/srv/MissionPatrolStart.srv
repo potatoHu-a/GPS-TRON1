@@ -1,0 +1,6 @@
+# Start patrol with optional mode override (empty = use node param default)
+string patrol_mode
+uint32 loop_count
+---
+bool success
+string message

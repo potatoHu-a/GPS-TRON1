@@ -1,0 +1,12 @@
+# GPS + wheel odometry fusion (independent open_map frame)
+gps_fix_topic: /gps/fix
+fastlio_odom_topic: /Odometry
+
+odom_topic: /open_nav/odom
+map_frame: open_map
+odom_frame: open_odom
+base_frame: open_base
+
+gps_update_min_interval: 0.5
+gps_position_alpha: 0.15
+publish_tf: true

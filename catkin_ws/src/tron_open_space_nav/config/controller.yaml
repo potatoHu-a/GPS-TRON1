@@ -1,0 +1,7 @@
+# TRON WebSocket control bridge.
+cmd_vel_topic: /open_nav/cmd_vel
+ws_url: "ws://10.192.1.2:5000"
+accid: "WF_TRON1A_412"
+publish_rate: 30.0
+dry_run: true
+auto_prepare: false

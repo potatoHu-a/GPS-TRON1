@@ -1,0 +1,9 @@
+# GPS map origin configuration
+# origin_mode:
+#   auto   - first valid /gps/fix becomes map origin (0, 0, 0)
+#   manual - use origin_lat / origin_lon / origin_alt below
+origin_mode: auto
+
+origin_lat: 0.0
+origin_lon: 0.0
+origin_alt: 0.0

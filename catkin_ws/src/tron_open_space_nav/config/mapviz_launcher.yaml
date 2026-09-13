@@ -1,0 +1,7 @@
+# start_mapviz_when_ready.py
+map_frame: map
+target_frame: open_base
+origin_topic: /local_xy_origin
+fix_topic: /gps/fix
+mapviz_bin: /opt/ros/noetic/lib/mapviz/mapviz
+post_ready_delay: 1.0

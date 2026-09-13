@@ -1,0 +1,65 @@
+<launch>
+  <!--
+    Global GPS outdoor navigation (robot-side, no RViz by default).
+    TF: earth -> map -> open_odom -> open_base
+    Requires: phone_gps_bridge (/gps/fix), FAST-LIO (/Odometry), Livox (/livox/lidar)
+  -->
+  <arg name="dry_run" default="true"/>
+  <arg name="use_fake_gps" default="false"/>
+  <arg name="use_fake_fastlio" default="false"/>
+  <arg name="use_rviz" default="false"/>
+  <arg name="robot_config" default="$(find tron_open_space_nav)/config/robot.yaml"/>
+  <arg name="robot_ws_url" default="ws://10.192.1.2:5000"/>
+  <arg name="robot_accid" default="WF_TRON1A_412"/>
+  <arg name="waypoint_source" default="multi_goal"/>
+  <arg name="enable_localization_diag" default="true"/>
+
+  <!-- Global WGS84 -> true-north ENU -->
+  <node pkg="tron_open_space_nav" type="gps_global_converter.py" name="gps_global_converter" output="screen">
+    <rosparam file="$(find tron_open_space_nav)/config/gps_global.yaml" command="load"/>
+  </node>
+
+  <!-- Single goal: RViz 2D Nav Goal -> /move_base_simple/goal -->
+  <node pkg="tron_open_space_nav" type="gps_waypoint_collector.py" name="gps_waypoint_collector" output="screen">
+    <rosparam file="$(find tron_open_space_nav)/config/global_nav.yaml" command="load"/>
+    <param name="save_path" value="$(find tron_open_space_nav)/config/gps_waypoints.yaml"/>
+  </node>
+
+  <!-- Multi goal: /multi_navi_goals/mission -> /open_nav/waypoints -->
+  <node pkg="tron_open_space_nav" type="gps_multi_waypoint_collector.py" name="gps_multi_waypoint_collector" output="screen">
+    <rosparam file="$(find tron_open_space_nav)/config/multi_nav.yaml" command="load"/>
+    <param name="save_path" value="$(find tron_open_space_nav)/config/gps_waypoints.yaml"/>
+  </node>
+
+  <!-- Localization distance diagnostics -->
+  <node if="$(arg enable_localization_diag)" pkg="tron_open_space_nav"
+        type="localization_diagnostics.py" name="localization_diagnostics" output="screen">
+    <rosparam file="$(find tron_open_space_nav)/config/localization_diag.yaml" command="load"/>
+  </node>
+
+  <!-- Patrol / Mapviz mission services (once / loop / pingpong) -->
+  <node pkg="tron_open_space_nav" type="patrol_mission_manager.py" name="patrol_mission_manager" output="screen">
+    <rosparam file="$(find tron_open_space_nav)/config/patrol.yaml" command="load"/>
+    <param name="save_path" value="$(find tron_open_space_nav)/config/patrol_waypoints.yaml"/>
+  </node>
+
+  <!-- Core navigation stack -->
+  <include file="$(find tron_open_space_nav)/launch/open_nav.launch">
+    <arg name="dry_run" value="$(arg dry_run)"/>
+    <arg name="use_fake_gps" value="$(arg use_fake_gps)"/>
+    <arg name="use_fake_fastlio" value="$(arg use_fake_fastlio)"/>
+    <arg name="fusion_config" value="$(find tron_open_space_nav)/config/global_fusion.yaml"/>
+    <arg name="waypoint_config" value="$(find tron_open_space_nav)/config/global_waypoint.yaml"/>
+    <arg name="obstacle_config" value="$(find tron_open_space_nav)/config/obstacle_avoid.yaml"/>
+    <arg name="robot_config" value="$(arg robot_config)"/>
+    <arg name="robot_ws_url" value="$(arg robot_ws_url)"/>
+    <arg name="robot_accid" value="$(arg robot_accid)"/>
+    <arg name="waypoint_source" value="$(arg waypoint_source)"/>
+  </include>
+
+  <group if="$(arg use_rviz)">
+    <node pkg="rviz" type="rviz" name="gps_global_rviz" output="screen"
+          args="-d $(find tron_open_space_nav)/config/rviz/gps_global_nav.rviz"/>
+  </group>
+
+</launch>

@@ -1,0 +1,17 @@
+# LiDAR obstacle avoidance (no costmap)
+input_cmd_topic: /open_nav/cmd_vel_raw
+output_cmd_topic: /open_nav/cmd_vel
+
+pointcloud_topic: /livox/lidar
+scan_topic: /scan
+use_scan: false
+
+map_frame: open_map
+base_frame: open_base
+
+check_angle_deg: 60.0
+check_min_range: 0.25
+check_max_range: 4.0
+slow_distance: 2.0
+stop_distance: 0.8
+max_slowdown_factor: 0.2

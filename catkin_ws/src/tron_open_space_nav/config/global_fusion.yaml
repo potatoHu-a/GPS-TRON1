@@ -1,0 +1,21 @@
+# GPS + FAST-LIO fusion using true-north global ``map`` frame
+gps_fix_topic: /gps/fix
+gps_pose_topic: /open_nav/gps_filtered_pose
+use_filtered_gps_pose: true
+fastlio_odom_topic: /Odometry
+
+odom_topic: /open_nav/odom
+map_frame: map
+odom_frame: open_odom
+base_frame: open_base
+
+gps_update_min_interval: 0.5
+gps_correction_gain: 0.12
+gps_correction_max_step: 0.5
+gps_max_sigma: 8.0
+gps_max_speed: 3.0
+stationary_speed: 0.05
+stationary_window: 20
+publish_tf: true
+publish_localization_status: true
+# publishes /open_nav/fusion_status (offset); full diag on localization_diagnostics

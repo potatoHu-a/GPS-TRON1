@@ -1,0 +1,5 @@
+# Set human-measured reference distance for field tests (meters)
+float32 distance_m
+---
+bool success
+string message

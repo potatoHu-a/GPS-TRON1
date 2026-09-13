@@ -1,0 +1,7 @@
+<launch>
+  <include file="$(find tron_open_space_nav)/launch/open_nav.launch">
+    <arg name="stage" value="gps"/>
+    <arg name="use_fake_gps" value="true"/>
+    <arg name="dry_run" value="true"/>
+  </include>
+</launch>

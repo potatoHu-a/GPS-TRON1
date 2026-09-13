@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>tron_open_nav</name>
+  <version>0.1.0</version>
+  <description>GPS to map-frame localization and move_base goal publishing for open-space navigation</description>
+
+  <maintainer email="user@todo.todo">user</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>rospy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>tf2_ros</depend>
+
+  <export>
+  </export>
+</package>

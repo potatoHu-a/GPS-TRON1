@@ -1,0 +1,14 @@
+<launch>
+  <!-- Load GPS origin settings -->
+  <rosparam file="$(find tron_open_nav)/config/gps_origin.yaml" command="load"/>
+
+  <!-- GPS WGS84 -> map ENU localizer -->
+  <node pkg="tron_open_nav" type="gps_localizer.py" name="gps_localizer" output="screen">
+    <param name="origin_mode" value="auto"/>
+    <param name="fix_topic" value="/gps/fix"/>
+    <param name="pose_topic" value="/gps/pose"/>
+    <param name="map_frame" value="map"/>
+    <param name="gps_frame" value="gps_link"/>
+    <param name="publish_tf" value="true"/>
+  </node>
+</launch>
