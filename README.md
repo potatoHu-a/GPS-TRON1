@@ -52,6 +52,8 @@ sudo apt install -y \
   ros-noetic-visualization-msgs
 ```
 
+真实机器人使用 Livox MID360 时，还需要目标工作区中已有 `livox_ros_driver2`，因为 `/livox/lidar` 默认类型是 `livox_ros_driver2/CustomMsg`。
+
 ## 部署到新机器人
 
 在目标机器人上：
@@ -214,6 +216,20 @@ waypoint_tracker
 catkin_ws/src/tron_open_space_nav/config/obstacle_avoid.yaml
 ```
 
+真实机器人默认：
+
+```yaml
+pointcloud_topic: /livox/lidar
+pointcloud_type: livox_custom
+base_frame: open_base
+```
+
+如需接入已经转换好的 `sensor_msgs/PointCloud2`，可改为：
+
+```yaml
+pointcloud_type: pointcloud2
+```
+
 ## NetGPS TCP 说明
 
 `phone_gps_bridge` 使用 TCP client 连接 NetGPS TCP server。
@@ -253,4 +269,3 @@ rosrun tf tf_echo open_base livox_frame
 - 初次部署保持 `dry_run:=true`
 - 不要在未确认 GPS、FAST-LIO、TF、雷达和避障状态前启动实机运动
 - 公开仓库不要提交机器人 SSH 密码、token、WiFi 密码或现场账号密钥
-

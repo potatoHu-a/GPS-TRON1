@@ -4,6 +4,7 @@
 import copy
 import math
 
+import numpy as np
 import rospy
 import sensor_msgs.point_cloud2 as pc2
 import tf2_ros
@@ -13,6 +14,11 @@ from std_msgs.msg import String
 from visualization_msgs.msg import Marker, MarkerArray
 
 from tron_open_space_nav.msg import ObstacleStatus
+
+try:
+    from livox_ros_driver2.msg import CustomMsg as LivoxCustomMsg
+except ImportError:
+    LivoxCustomMsg = None
 
 
 STATE_CLEAR = "CLEAR"
@@ -44,6 +50,7 @@ class LidarObstacleAvoid(object):
         self.use_scan = rospy.get_param("~use_scan", False)
         self.scan_topic = rospy.get_param("~scan_topic", "/scan")
         self.cloud_topic = rospy.get_param("~pointcloud_topic", "/livox/lidar")
+        self.pointcloud_type = rospy.get_param("~pointcloud_type", "livox_custom")
         self.base_frame = rospy.get_param("~base_frame", "open_base")
 
         self.min_range = float(rospy.get_param("~check_min_range", 0.25))
@@ -108,16 +115,29 @@ class LidarObstacleAvoid(object):
         rospy.Subscriber(self.nav_mode_topic, String, self.nav_mode_callback, queue_size=5)
         if self.use_scan:
             rospy.Subscriber(self.scan_topic, LaserScan, self.scan_callback, queue_size=5)
-        else:
+        elif self.pointcloud_type == "livox_custom":
+            if LivoxCustomMsg is None:
+                rospy.logerr(
+                    "[lidar_obstacle_avoid] pointcloud_type=livox_custom but livox_ros_driver2 is not available"
+                )
+            else:
+                rospy.Subscriber(self.cloud_topic, LivoxCustomMsg, self.livox_callback, queue_size=5)
+        elif self.pointcloud_type == "pointcloud2":
             rospy.Subscriber(self.cloud_topic, PointCloud2, self.cloud_callback, queue_size=5)
+        else:
+            rospy.logerr(
+                "[lidar_obstacle_avoid] unsupported pointcloud_type=%s, expected livox_custom or pointcloud2",
+                self.pointcloud_type,
+            )
 
         self.safety_timer = rospy.Timer(rospy.Duration(0.1), self.timer_callback)
 
         rospy.loginfo(
-            "[lidar_obstacle_avoid] input=%s output=%s source=%s base_frame=%s",
+            "[lidar_obstacle_avoid] input=%s output=%s source=%s type=%s base_frame=%s",
             self.input_topic,
             self.output_topic,
             self.scan_topic if self.use_scan else self.cloud_topic,
+            "scan" if self.use_scan else self.pointcloud_type,
             self.base_frame,
         )
 
@@ -160,11 +180,15 @@ class LidarObstacleAvoid(object):
         self._process_points(points, msg.header.frame_id, msg.header.stamp, apply_ground_filter=False)
 
     def cloud_callback(self, msg):
-        points = pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)
+        points = ((p[0], p[1], p[2]) for p in pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True))
+        self._process_points(points, msg.header.frame_id, msg.header.stamp, apply_ground_filter=True)
+
+    def livox_callback(self, msg):
+        points = ((p.x, p.y, p.z) for p in msg.points)
         self._process_points(points, msg.header.frame_id, msg.header.stamp, apply_ground_filter=True)
 
     def _process_points(self, points, source_frame, stamp, apply_ground_filter):
-        transform = None
+        matrix = None
         if source_frame and source_frame != self.base_frame:
             try:
                 transform = self.tf_buffer.lookup_transform(
@@ -186,41 +210,61 @@ class LidarObstacleAvoid(object):
                     exc,
                 )
                 return
+            matrix = self._transform_to_matrix(transform.transform)
+
+        points_np = self._points_to_numpy(points)
+        if points_np.size == 0:
+            self._update_regions(self._empty_regions(), source_frame, stamp, [])
+            return
+
+        finite_mask = np.isfinite(points_np).all(axis=1)
+        points_np = points_np[finite_mask]
+        if points_np.size == 0:
+            self._update_regions(self._empty_regions(), source_frame, stamp, [])
+            return
+
+        if matrix is not None:
+            ones = np.ones((points_np.shape[0], 1), dtype=np.float64)
+            points_h = np.hstack((points_np, ones))
+            points_np = points_h.dot(matrix.T)[:, :3]
 
         regions = self._empty_regions()
         obstacle_points = []
-        for p in points:
-            try:
-                x, y, z = float(p[0]), float(p[1]), float(p[2])
-            except (TypeError, ValueError, IndexError):
-                continue
-            if any(math.isnan(v) or math.isinf(v) for v in (x, y, z)):
-                continue
-            if transform is not None:
-                x, y, z = self._transform_point(x, y, z, transform.transform)
+        x = points_np[:, 0]
+        y = points_np[:, 1]
+        z = points_np[:, 2]
+        dist_xy = np.hypot(x, y)
+        mask = (
+            (dist_xy >= self.min_range)
+            & (dist_xy <= self.max_range)
+            & (x >= self.roi_min_x)
+            & (x <= self.roi_max_x)
+            & (y >= self.roi_min_y)
+            & (y <= self.roi_max_y)
+            & (z >= self.roi_min_z)
+            & (z <= self.roi_max_z)
+        )
+        if apply_ground_filter:
+            mask = mask & (z > self.ground_z_max)
 
-            dist_xy = math.hypot(x, y)
-            if dist_xy < self.min_range or dist_xy > self.max_range:
-                continue
-            if x < self.roi_min_x or x > self.roi_max_x:
-                continue
-            if y < self.roi_min_y or y > self.roi_max_y:
-                continue
-            if z < self.roi_min_z or z > self.roi_max_z:
-                continue
-            if apply_ground_filter and z <= self.ground_z_max:
-                continue
+        filtered = points_np[mask]
+        for x_val, y_val, z_val in filtered:
+            x_f = float(x_val)
+            y_f = float(y_val)
+            z_f = float(z_val)
+            if abs(y_f) <= self.half_width:
+                self._add_point(regions["front"], x_f, y_f, z_f)
+                obstacle_points.append((x_f, y_f, z_f))
+            elif self.left_y_min < y_f <= self.left_y_max:
+                self._add_point(regions["left"], x_f, y_f, z_f)
+                obstacle_points.append((x_f, y_f, z_f))
+            elif self.right_y_min <= y_f < self.right_y_max:
+                self._add_point(regions["right"], x_f, y_f, z_f)
+                obstacle_points.append((x_f, y_f, z_f))
 
-            if abs(y) <= self.half_width:
-                self._add_point(regions["front"], x, y, z)
-                obstacle_points.append((x, y, z))
-            elif self.left_y_min < y <= self.left_y_max:
-                self._add_point(regions["left"], x, y, z)
-                obstacle_points.append((x, y, z))
-            elif self.right_y_min <= y < self.right_y_max:
-                self._add_point(regions["right"], x, y, z)
-                obstacle_points.append((x, y, z))
+        self._update_regions(regions, source_frame, stamp, obstacle_points)
 
+    def _update_regions(self, regions, source_frame, stamp, obstacle_points):
         self._compute_occupancy(regions)
         self.regions = regions
         self.last_cloud_time = stamp if stamp and stamp != rospy.Time(0) else rospy.Time.now()
@@ -230,6 +274,17 @@ class LidarObstacleAvoid(object):
         self._publish_status()
         if self.debug_markers:
             self._publish_markers(obstacle_points)
+
+    def _points_to_numpy(self, points):
+        rows = []
+        for p in points:
+            try:
+                rows.append((float(p[0]), float(p[1]), float(p[2])))
+            except (TypeError, ValueError, IndexError):
+                continue
+        if not rows:
+            return np.empty((0, 3), dtype=np.float64)
+        return np.asarray(rows, dtype=np.float64)
 
     def _add_point(self, region, x, y, z):
         region.point_count += 1
@@ -245,21 +300,24 @@ class LidarObstacleAvoid(object):
         regions["left"].occupancy = regions["left"].point_count / side_area
         regions["right"].occupancy = regions["right"].point_count / side_area
 
-    def _transform_point(self, x, y, z, transform):
+    def _transform_to_matrix(self, transform):
         q = transform.rotation
-        tx = transform.translation.x
-        ty = transform.translation.y
-        tz = transform.translation.z
 
         qx, qy, qz, qw = q.x, q.y, q.z, q.w
         xx, yy, zz = qx * qx, qy * qy, qz * qz
         xy, xz, yz = qx * qy, qx * qz, qy * qz
         wx, wy, wz = qw * qx, qw * qy, qw * qz
 
-        rx = (1.0 - 2.0 * (yy + zz)) * x + 2.0 * (xy - wz) * y + 2.0 * (xz + wy) * z
-        ry = 2.0 * (xy + wz) * x + (1.0 - 2.0 * (xx + zz)) * y + 2.0 * (yz - wx) * z
-        rz = 2.0 * (xz - wy) * x + 2.0 * (yz + wx) * y + (1.0 - 2.0 * (xx + yy)) * z
-        return rx + tx, ry + ty, rz + tz
+        matrix = np.array(
+            [
+                [1.0 - 2.0 * (yy + zz), 2.0 * (xy - wz), 2.0 * (xz + wy), transform.translation.x],
+                [2.0 * (xy + wz), 1.0 - 2.0 * (xx + zz), 2.0 * (yz - wx), transform.translation.y],
+                [2.0 * (xz - wy), 2.0 * (yz + wx), 1.0 - 2.0 * (xx + yy), transform.translation.z],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            dtype=np.float64,
+        )
+        return matrix
 
     def _desired_state(self):
         if self.nav_mode == "stair_execution":
