@@ -4,4 +4,15 @@ base_frame: body
 max_linear_velocity: 0.2
 max_angular_velocity: 0.2
 pointcloud_timeout: 0.5
-stop_distance: 0.8
+
+# Conservative clearance envelope for first-motion testing. These thresholds
+# are measured from the configured footprint, not from the LiDAR origin.
+inflation_radius: 0.65
+stop_distance: 0.15
+slow_distance: 1.00
+
+forward_corridor:
+  enabled: true
+  length: 2.0
+  half_width: 0.40
+  min_speed: 0.02

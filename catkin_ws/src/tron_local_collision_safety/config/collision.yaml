@@ -8,7 +8,7 @@ base_frame: body
 pointcloud_timeout: 0.8
 tf_timeout: 0.1
 
-# Official TRON1 rectangular footprint in the body frame.
+# TRON1 footprint used by the official sentry_navigation costmap and TEB.
 footprint:
   - [-0.6, -0.25]
   - [-0.6, 0.25]
@@ -20,8 +20,10 @@ prediction:
   dt: 0.1
 
 height_filter:
-  min_z: -0.2
-  max_z: 1.5
+  # Applied after TF conversion into base_frame. The official configuration's
+  # optional PointCloud2 source uses -0.4..0.4 m (its active source is /scan).
+  min_z: -0.4
+  max_z: 0.4
 
 range_filter:
   min_range: 0.1
@@ -34,8 +36,25 @@ grid:
   y_max: 3.0
   resolution: 0.05
 
-# A predicted footprint closer than this distance enters SLOW.
-safety_distance: 0.5
+# Costmap-style filtering. One point per cell matches the official obstacle
+# layer; increase only if isolated Livox returns are proven to be noise.
+obstacle_filter:
+  min_points_per_cell: 1
+
+# Official costmap inflation is 0.65 m and TEB minimum obstacle distance is
+# 0.5 m. STOP is reserved for physical/swept-footprint collision plus this
+# small discretization allowance; SLOW covers the inflated safety envelope.
+inflation_radius: 0.65
+stop_distance: 0.05
+slow_distance: 0.80
+
+# Direction-aware safety corridor. It extends in the commanded travel
+# direction; side and rear points outside the swept footprint do not trigger it.
+forward_corridor:
+  enabled: true
+  length: 2.0
+  half_width: 0.40
+  min_speed: 0.02
 
 # SLOW scales every Twist component equally to preserve direction and curvature.
 slow_scale_min: 0.35

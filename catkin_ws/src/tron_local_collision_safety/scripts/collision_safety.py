@@ -47,8 +47,8 @@ class CollisionSafetyNode:
             rospy.get_param("~prediction/horizon", 2.0)
         )
         self.prediction_dt = float(rospy.get_param("~prediction/dt", 0.1))
-        self.min_z = float(rospy.get_param("~height_filter/min_z", -0.2))
-        self.max_z = float(rospy.get_param("~height_filter/max_z", 1.5))
+        self.min_z = float(rospy.get_param("~height_filter/min_z", -0.4))
+        self.max_z = float(rospy.get_param("~height_filter/max_z", 0.4))
         self.min_range = float(rospy.get_param("~range_filter/min_range", 0.1))
         self.max_range = float(rospy.get_param("~range_filter/max_range", 8.0))
         self.grid_x_min = float(rospy.get_param("~grid/x_min", -2.0))
@@ -56,7 +56,32 @@ class CollisionSafetyNode:
         self.grid_y_min = float(rospy.get_param("~grid/y_min", -3.0))
         self.grid_y_max = float(rospy.get_param("~grid/y_max", 3.0))
         self.resolution = float(rospy.get_param("~grid/resolution", 0.05))
-        self.safety_distance = float(rospy.get_param("~safety_distance", 0.5))
+        # The official stack combines a rectangular footprint, costmap inflation,
+        # and TEB trajectory feasibility.  Keep those concerns separate here so
+        # each safety envelope can be tuned without changing the ROS interface.
+        legacy_safety_distance = float(rospy.get_param("~safety_distance", 0.5))
+        self.inflation_radius = float(
+            rospy.get_param("~inflation_radius", legacy_safety_distance)
+        )
+        self.stop_distance = float(rospy.get_param("~stop_distance", 0.0))
+        self.slow_distance = float(
+            rospy.get_param("~slow_distance", self.inflation_radius)
+        )
+        self.corridor_enabled = bool(
+            rospy.get_param("~forward_corridor/enabled", True)
+        )
+        self.corridor_length = float(
+            rospy.get_param("~forward_corridor/length", 2.0)
+        )
+        self.corridor_half_width = float(
+            rospy.get_param("~forward_corridor/half_width", 0.4)
+        )
+        self.corridor_min_speed = float(
+            rospy.get_param("~forward_corridor/min_speed", 0.02)
+        )
+        self.min_points_per_cell = int(
+            rospy.get_param("~obstacle_filter/min_points_per_cell", 1)
+        )
         self.slow_scale_min = float(rospy.get_param("~slow_scale_min", 0.35))
         self.slow_scale_max = float(rospy.get_param("~slow_scale_max", 0.70))
         self.pointcloud_timeout = float(
@@ -140,8 +165,18 @@ class CollisionSafetyNode:
             raise ValueError("grid minimums must be smaller than maximums")
         if self.resolution <= 0.0:
             raise ValueError("grid resolution must be positive")
-        if self.safety_distance < 0.0:
-            raise ValueError("safety_distance must not be negative")
+        if self.inflation_radius < 0.0:
+            raise ValueError("inflation_radius must not be negative")
+        if self.stop_distance < 0.0:
+            raise ValueError("stop_distance must not be negative")
+        if self.slow_distance <= self.stop_distance:
+            raise ValueError("slow_distance must be greater than stop_distance")
+        if self.corridor_length <= 0.0 or self.corridor_half_width <= 0.0:
+            raise ValueError("forward corridor dimensions must be positive")
+        if self.corridor_min_speed < 0.0:
+            raise ValueError("forward corridor min_speed must not be negative")
+        if self.min_points_per_cell <= 0:
+            raise ValueError("min_points_per_cell must be positive")
         if not 0.0 < self.slow_scale_min <= self.slow_scale_max <= 1.0:
             raise ValueError(
                 "slow scales must satisfy 0 < slow_scale_min <= slow_scale_max <= 1"
@@ -289,6 +324,13 @@ class CollisionSafetyNode:
             return occupancy, np.empty((0, 2), dtype=np.float64)
         x_indices = np.floor((points[:, 0] - self.grid_x_min) / self.resolution).astype(np.int32)
         y_indices = np.floor((points[:, 1] - self.grid_y_min) / self.resolution).astype(np.int32)
+        flat_indices = y_indices * self.grid_width + x_indices
+        unique_indices, counts = np.unique(flat_indices, return_counts=True)
+        unique_indices = unique_indices[counts >= self.min_points_per_cell]
+        if len(unique_indices) == 0:
+            return occupancy, np.empty((0, 2), dtype=np.float64)
+        y_indices = unique_indices // self.grid_width
+        x_indices = unique_indices % self.grid_width
         occupancy[y_indices, x_indices] = True
         y_occupied, x_occupied = np.nonzero(occupancy)
         centers = np.column_stack(
@@ -343,7 +385,9 @@ class CollisionSafetyNode:
             state, risk, front_distance = "STOP", 1.0, -1.0
             fault = "point cloud timeout ({:.3f}s)".format(cloud_age)
         else:
-            state, risk = self._evaluate_state(occupied, trajectory)
+            state, risk = self._evaluate_state(
+                occupied, trajectory, velocity, yaw_rate
+            )
             front_distance = self._front_distance(occupied)
             fault = None
 
@@ -423,7 +467,7 @@ class CollisionSafetyNode:
             trajectory[index] = (x_position, y_position, yaw)
         return trajectory
 
-    def _evaluate_state(self, occupied, trajectory):
+    def _evaluate_state(self, occupied, trajectory, velocity, yaw_rate):
         if len(occupied) == 0:
             return "FREE", 0.0
 
@@ -431,19 +475,97 @@ class CollisionSafetyNode:
         if current_clearance <= self.cell_radius:
             return "STOP", 1.0
 
-        minimum_clearance = current_clearance
+        minimum_clearance = float("inf")
         for pose in trajectory[1:]:
-            minimum_clearance = min(
-                minimum_clearance, self._footprint_clearance(occupied, pose)
-            )
-            if minimum_clearance <= self.cell_radius:
-                return "SLOW", 1.0
+            pose_clearance = self._footprint_clearance(occupied, pose)
+            if pose_clearance <= self.stop_distance + self.cell_radius:
+                return "STOP", 1.0
 
+        relevant = self._motion_relevant_points(occupied, velocity)
+        for pose in trajectory:
+            if len(relevant) == 0:
+                break
+            minimum_clearance = min(
+                minimum_clearance, self._footprint_clearance(relevant, pose)
+            )
         effective_clearance = max(0.0, minimum_clearance - self.cell_radius)
-        if effective_clearance < self.safety_distance:
-            risk = 1.0 - effective_clearance / max(self.safety_distance, 1.0e-9)
-            return "SLOW", float(np.clip(risk, 0.0, 1.0))
+        slow_limit = max(self.inflation_radius, self.slow_distance)
+        risks = []
+        if effective_clearance < slow_limit:
+            risks.append(self._clearance_risk(effective_clearance, slow_limit))
+
+        corridor_clearance = self._directional_corridor_clearance(
+            occupied, velocity, yaw_rate
+        )
+        if corridor_clearance is not None:
+            if corridor_clearance <= self.stop_distance:
+                return "STOP", 1.0
+            if corridor_clearance < self.slow_distance:
+                risks.append(
+                    self._clearance_risk(corridor_clearance, self.slow_distance)
+                )
+
+        if risks:
+            return "SLOW", float(np.clip(max(risks), 0.0, 1.0))
         return "FREE", 0.0
+
+    def _motion_relevant_points(self, occupied, velocity):
+        """Exclude points behind the commanded motion from soft limiting only."""
+        if abs(velocity) < self.corridor_min_speed:
+            return occupied
+        if velocity > 0.0:
+            rear_edge = float(np.min(self.footprint[:, 0]))
+            return occupied[occupied[:, 0] >= rear_edge]
+        front_edge = float(np.max(self.footprint[:, 0]))
+        return occupied[occupied[:, 0] <= front_edge]
+
+    def _clearance_risk(self, clearance, slow_limit):
+        span = max(slow_limit - self.stop_distance, 1.0e-9)
+        return 1.0 - (clearance - self.stop_distance) / span
+
+    def _directional_corridor_clearance(self, occupied, velocity, yaw_rate):
+        """Return clearance from the leading footprint edge in travel direction."""
+        if not self.corridor_enabled or abs(velocity) < self.corridor_min_speed:
+            return None
+
+        # Curved motion is evaluated by the swept trajectory.  The corridor is
+        # deliberately widened for yaw rate, but it never chooses a turn side.
+        dynamic_width = self.corridor_half_width + min(
+            self.inflation_radius, abs(yaw_rate) * self.prediction_horizon * 0.25
+        )
+        travel_distance = abs(velocity) * self.prediction_horizon
+        corridor_length = max(self.corridor_length, travel_distance)
+        min_y = -dynamic_width
+        max_y = dynamic_width
+
+        if velocity > 0.0:
+            leading_edge = float(np.max(self.footprint[:, 0]))
+            candidates = occupied[
+                (occupied[:, 0] >= leading_edge)
+                & (occupied[:, 0] <= leading_edge + corridor_length)
+                & (occupied[:, 1] >= min_y)
+                & (occupied[:, 1] <= max_y)
+            ]
+            if len(candidates) == 0:
+                return None
+            return max(
+                0.0,
+                float(np.min(candidates[:, 0]) - leading_edge - self.cell_radius),
+            )
+
+        leading_edge = float(np.min(self.footprint[:, 0]))
+        candidates = occupied[
+            (occupied[:, 0] <= leading_edge)
+            & (occupied[:, 0] >= leading_edge - corridor_length)
+            & (occupied[:, 1] >= min_y)
+            & (occupied[:, 1] <= max_y)
+        ]
+        if len(candidates) == 0:
+            return None
+        return max(
+            0.0,
+            float(leading_edge - np.max(candidates[:, 0]) - self.cell_radius),
+        )
 
     def _footprint_clearance(self, occupied, pose):
         x_position, y_position, yaw = pose
@@ -500,8 +622,8 @@ class CollisionSafetyNode:
         if len(occupied) == 0:
             return float("inf")
         front_x = float(np.max(self.footprint[:, 0]))
-        min_y = float(np.min(self.footprint[:, 1]))
-        max_y = float(np.max(self.footprint[:, 1]))
+        min_y = -self.corridor_half_width
+        max_y = self.corridor_half_width
         corridor = occupied[
             (occupied[:, 0] >= front_x)
             & (occupied[:, 1] >= min_y)
@@ -522,6 +644,8 @@ class CollisionSafetyNode:
         markers.markers.append(self._obstacle_marker(stamp, obstacle_points))
         markers.markers.append(self._footprint_marker(stamp, state))
         markers.markers.append(self._trajectory_marker(stamp, trajectory))
+        markers.markers.append(self._inflation_marker(stamp))
+        markers.markers.append(self._corridor_marker(stamp))
         return markers
 
     def _base_marker(self, stamp, marker_id, marker_type):
@@ -569,6 +693,41 @@ class CollisionSafetyNode:
         marker.color.b = 1.00
         marker.color.a = 1.0
         marker.points = [Point(x=float(x), y=float(y), z=0.06) for x, y, _yaw in trajectory]
+        return marker
+
+    def _inflation_marker(self, stamp):
+        marker = self._base_marker(stamp, 3, Marker.LINE_STRIP)
+        marker.scale.x = 0.025
+        marker.color.r = 1.0
+        marker.color.g = 0.55
+        marker.color.b = 0.0
+        marker.color.a = 0.85
+        min_x = float(np.min(self.footprint[:, 0])) - self.inflation_radius
+        max_x = float(np.max(self.footprint[:, 0])) + self.inflation_radius
+        min_y = float(np.min(self.footprint[:, 1])) - self.inflation_radius
+        max_y = float(np.max(self.footprint[:, 1])) + self.inflation_radius
+        vertices = (
+            (min_x, min_y),
+            (min_x, max_y),
+            (max_x, max_y),
+            (max_x, min_y),
+            (min_x, min_y),
+        )
+        marker.points = [Point(x=x, y=y, z=0.015) for x, y in vertices]
+        return marker
+
+    def _corridor_marker(self, stamp):
+        marker = self._base_marker(stamp, 4, Marker.CUBE)
+        front_x = float(np.max(self.footprint[:, 0]))
+        marker.pose.position.x = front_x + self.corridor_length * 0.5
+        marker.pose.position.z = 0.01
+        marker.scale.x = self.corridor_length
+        marker.scale.y = self.corridor_half_width * 2.0
+        marker.scale.z = 0.01
+        marker.color.r = 0.15
+        marker.color.g = 0.55
+        marker.color.b = 1.0
+        marker.color.a = 0.12 if self.corridor_enabled else 0.0
         return marker
 
 
