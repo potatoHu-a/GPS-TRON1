@@ -3,6 +3,7 @@ input_cmd_topic: /open_nav/cmd_vel_raw
 output_cmd_topic: /open_nav/cmd_vel
 
 pointcloud_topic: /livox/lidar
+pointcloud_type: livox_custom
 scan_topic: /scan
 use_scan: false
 
@@ -14,4 +15,42 @@ check_min_range: 0.25
 check_max_range: 4.0
 slow_distance: 2.0
 stop_distance: 0.8
+slow_clear_distance: 2.3
+blocked_enter_distance: 0.8
+blocked_exit_distance: 1.0
+robot_length: 1.2
+robot_width: 0.5
+safety_margin: 0.15
+min_effective_forward_vel: 0.2
+max_linear_vel: 0.5
 max_slowdown_factor: 0.2
+
+roi_min_x: 0.15
+roi_max_x: 4.0
+roi_min_y: -1.40
+roi_max_y: 1.40
+roi_min_z: -0.35
+roi_max_z: 1.40
+ground_z_max: 0.08
+
+self_filter_enabled: true
+self_filter_min_x: -0.50
+self_filter_max_x: 0.70
+self_filter_min_y: -0.50
+self_filter_max_y: 0.50
+self_filter_min_z: -0.50
+self_filter_max_z: 1.20
+
+min_points: 5
+confirm_frames: 3
+clear_frames: 5
+direction_hold_time: 1.5
+switch_margin: 0.35
+clearance_smoothing_frames: 5
+
+avoid_angular_vel: 0.28
+max_output_angular_vel: 0.4
+pointcloud_timeout: 0.8
+fail_safe_stop: true
+debug_markers: true
+debug_stats: true

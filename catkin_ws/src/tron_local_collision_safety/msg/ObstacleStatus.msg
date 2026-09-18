@@ -1,0 +1,12 @@
+std_msgs/Header header
+
+string state
+float32 front_distance
+int32 obstacle_points
+float32 collision_risk
+float32 pointcloud_age
+float32 cmd_age
+float32 cmd_raw_linear
+float32 cmd_output_linear
+float32 cmd_raw_angular
+float32 cmd_output_angular

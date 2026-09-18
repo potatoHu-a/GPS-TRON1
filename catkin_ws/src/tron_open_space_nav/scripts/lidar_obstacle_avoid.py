@@ -3,6 +3,7 @@
 
 import copy
 import math
+from collections import deque
 
 import numpy as np
 import rospy
@@ -62,32 +63,57 @@ class LidarObstacleAvoid(object):
         self.roi_min_z = float(rospy.get_param("~roi_min_z", -0.35))
         self.roi_max_z = float(rospy.get_param("~roi_max_z", 1.4))
         self.ground_z_max = float(rospy.get_param("~ground_z_max", 0.08))
+        self.self_filter_enabled = bool(rospy.get_param("~self_filter_enabled", True))
+        self.self_filter_min_x = float(rospy.get_param("~self_filter_min_x", -0.50))
+        self.self_filter_max_x = float(rospy.get_param("~self_filter_max_x", 0.70))
+        self.self_filter_min_y = float(rospy.get_param("~self_filter_min_y", -0.50))
+        self.self_filter_max_y = float(rospy.get_param("~self_filter_max_y", 0.50))
+        self.self_filter_min_z = float(rospy.get_param("~self_filter_min_z", -0.50))
+        self.self_filter_max_z = float(rospy.get_param("~self_filter_max_z", 1.20))
 
-        self.robot_width = float(rospy.get_param("~robot_width", 0.70))
+        self.robot_width = float(rospy.get_param("~robot_width", 0.50))
+        self.robot_length = float(rospy.get_param("~robot_length", 1.20))
         self.safety_margin = float(rospy.get_param("~safety_margin", 0.15))
         self.side_region_width = float(rospy.get_param("~side_region_width", 0.55))
         self.min_points = int(rospy.get_param("~min_points", 5))
 
         self.slow_distance = float(rospy.get_param("~slow_distance", 2.0))
+        self.slow_clear_distance = float(rospy.get_param("~slow_clear_distance", self.slow_distance + 0.3))
         self.stop_distance = float(rospy.get_param("~stop_distance", 0.8))
+        self.blocked_enter_distance = float(
+            rospy.get_param("~blocked_enter_distance", self.stop_distance)
+        )
+        self.blocked_exit_distance = float(
+            rospy.get_param(
+                "~blocked_exit_distance",
+                rospy.get_param("~blocked_clear_distance", self.stop_distance + 0.2),
+            )
+        )
         self.slowdown_factor = float(
             rospy.get_param("~slowdown_factor", rospy.get_param("~max_slowdown_factor", 0.35))
         )
         self.avoid_linear_scale = float(rospy.get_param("~avoid_linear_scale", 0.65))
         self.avoid_angular_vel = float(rospy.get_param("~avoid_angular_vel", 0.28))
         self.min_effective_linear_vel = float(rospy.get_param("~min_effective_linear_vel", 0.25))
+        self.min_effective_forward_vel = float(rospy.get_param("~min_effective_forward_vel", 0.2))
+        self.max_output_linear_vel = float(
+            rospy.get_param("~max_linear_vel", rospy.get_param("~max_output_linear_vel", 0.5))
+        )
         self.max_output_angular_vel = float(rospy.get_param("~max_output_angular_vel", 0.4))
 
-        self.confirm_frames = max(1, int(rospy.get_param("~confirm_frames", 2)))
-        self.clear_frames = max(1, int(rospy.get_param("~clear_frames", 3)))
+        self.confirm_frames = max(1, int(rospy.get_param("~confirm_frames", 3)))
+        self.clear_frames = max(1, int(rospy.get_param("~clear_frames", 5)))
         self.direction_hold_time = float(rospy.get_param("~direction_hold_time", 1.5))
         self.switch_margin = float(rospy.get_param("~switch_margin", 0.35))
 
         self.pointcloud_timeout = float(rospy.get_param("~pointcloud_timeout", 0.8))
         self.fail_safe_stop = bool(rospy.get_param("~fail_safe_stop", True))
         self.debug_markers = bool(rospy.get_param("~debug_markers", True))
+        self.debug_stats = bool(rospy.get_param("~debug_stats", True))
+        self.clearance_smoothing_frames = max(1, int(rospy.get_param("~clearance_smoothing_frames", 5)))
 
         self.half_width = self.robot_width * 0.5 + self.safety_margin
+        self.front_footprint_x = self.robot_length * 0.5 + self.safety_margin
         self.left_y_min = self.half_width
         self.left_y_max = self.half_width + self.side_region_width
         self.right_y_min = -self.half_width - self.side_region_width
@@ -101,11 +127,17 @@ class LidarObstacleAvoid(object):
         self.pending_count = 0
         self.avoid_direction = None
         self.avoid_since = rospy.Time(0)
+        self.state_since = rospy.Time.now()
+        self.selected_direction_since = rospy.Time(0)
         self.nav_mode = "flat"
         self.last_cmd = Twist()
         self.last_cloud_time = rospy.Time(0)
         self.last_cloud_frame = ""
         self.regions = self._empty_regions()
+        self.left_clearance_history = deque(maxlen=self.clearance_smoothing_frames)
+        self.right_clearance_history = deque(maxlen=self.clearance_smoothing_frames)
+        self.filter_counts = self._empty_filter_counts()
+        self.bounds = self._empty_bounds()
 
         self.cmd_pub = rospy.Publisher(self.output_topic, Twist, queue_size=10)
         self.status_pub = rospy.Publisher(self.status_topic, ObstacleStatus, queue_size=10)
@@ -146,6 +178,25 @@ class LidarObstacleAvoid(object):
             "front": RegionStats(self.roi_max_x),
             "left": RegionStats(self.roi_max_x),
             "right": RegionStats(self.roi_max_x),
+        }
+
+    def _empty_filter_counts(self):
+        return {
+            "raw_points": 0,
+            "after_tf_points": 0,
+            "after_self_filter_points": 0,
+            "after_roi_points": 0,
+            "after_ground_points": 0,
+        }
+
+    def _empty_bounds(self):
+        return {
+            "min_x": float("nan"),
+            "max_x": float("nan"),
+            "min_y": float("nan"),
+            "max_y": float("nan"),
+            "min_z": float("nan"),
+            "max_z": float("nan"),
         }
 
     def nav_mode_callback(self, msg):
@@ -213,6 +264,9 @@ class LidarObstacleAvoid(object):
             matrix = self._transform_to_matrix(transform.transform)
 
         points_np = self._points_to_numpy(points)
+        self.filter_counts = self._empty_filter_counts()
+        self.bounds = self._empty_bounds()
+        self.filter_counts["raw_points"] = int(points_np.shape[0])
         if points_np.size == 0:
             self._update_regions(self._empty_regions(), source_frame, stamp, [])
             return
@@ -227,6 +281,26 @@ class LidarObstacleAvoid(object):
             ones = np.ones((points_np.shape[0], 1), dtype=np.float64)
             points_h = np.hstack((points_np, ones))
             points_np = points_h.dot(matrix.T)[:, :3]
+        self.filter_counts["after_tf_points"] = int(points_np.shape[0])
+        self.bounds = self._compute_bounds(points_np)
+
+        if self.self_filter_enabled:
+            sx = points_np[:, 0]
+            sy = points_np[:, 1]
+            sz = points_np[:, 2]
+            self_mask = (
+                (sx >= self.self_filter_min_x)
+                & (sx <= self.self_filter_max_x)
+                & (sy >= self.self_filter_min_y)
+                & (sy <= self.self_filter_max_y)
+                & (sz >= self.self_filter_min_z)
+                & (sz <= self.self_filter_max_z)
+            )
+            points_np = points_np[~self_mask]
+        self.filter_counts["after_self_filter_points"] = int(points_np.shape[0])
+        if points_np.size == 0:
+            self._update_regions(self._empty_regions(), source_frame, stamp, [])
+            return
 
         regions = self._empty_regions()
         obstacle_points = []
@@ -244,10 +318,13 @@ class LidarObstacleAvoid(object):
             & (z >= self.roi_min_z)
             & (z <= self.roi_max_z)
         )
+        roi_points = points_np[mask]
+        self.filter_counts["after_roi_points"] = int(roi_points.shape[0])
         if apply_ground_filter:
             mask = mask & (z > self.ground_z_max)
 
         filtered = points_np[mask]
+        self.filter_counts["after_ground_points"] = int(filtered.shape[0])
         for x_val, y_val, z_val in filtered:
             x_f = float(x_val)
             y_f = float(y_val)
@@ -264,16 +341,62 @@ class LidarObstacleAvoid(object):
 
         self._update_regions(regions, source_frame, stamp, obstacle_points)
 
+    def _compute_bounds(self, points_np):
+        if points_np.size == 0:
+            return self._empty_bounds()
+        return {
+            "min_x": float(np.min(points_np[:, 0])),
+            "max_x": float(np.max(points_np[:, 0])),
+            "min_y": float(np.min(points_np[:, 1])),
+            "max_y": float(np.max(points_np[:, 1])),
+            "min_z": float(np.min(points_np[:, 2])),
+            "max_z": float(np.max(points_np[:, 2])),
+        }
+
     def _update_regions(self, regions, source_frame, stamp, obstacle_points):
         self._compute_occupancy(regions)
         self.regions = regions
-        self.last_cloud_time = stamp if stamp and stamp != rospy.Time(0) else rospy.Time.now()
+        self.left_clearance_history.append(self._region_clearance("left"))
+        self.right_clearance_history.append(self._region_clearance("right"))
+        self.last_cloud_time = self._safe_stamp(stamp)
         self.last_cloud_frame = source_frame
 
         self._commit_state(self._desired_state())
+        if self.debug_stats:
+            self._log_filter_stats()
         self._publish_status()
         if self.debug_markers:
             self._publish_markers(obstacle_points)
+
+    def _safe_stamp(self, stamp):
+        now = rospy.Time.now()
+        if not stamp or stamp == rospy.Time(0):
+            return now
+        if abs((now - stamp).to_sec()) > 5.0:
+            return now
+        return stamp
+
+    def _log_filter_stats(self):
+        rospy.loginfo_throttle(
+            1.0,
+            "[obstacle_avoid] cloud frame=%s xyz=[%.2f..%.2f, %.2f..%.2f, %.2f..%.2f] "
+            "points raw=%d tf=%d self=%d roi=%d ground=%d center=%d left=%d right=%d",
+            self.last_cloud_frame,
+            self.bounds["min_x"],
+            self.bounds["max_x"],
+            self.bounds["min_y"],
+            self.bounds["max_y"],
+            self.bounds["min_z"],
+            self.bounds["max_z"],
+            self.filter_counts["raw_points"],
+            self.filter_counts["after_tf_points"],
+            self.filter_counts["after_self_filter_points"],
+            self.filter_counts["after_roi_points"],
+            self.filter_counts["after_ground_points"],
+            self.regions["front"].point_count,
+            self.regions["left"].point_count,
+            self.regions["right"].point_count,
+        )
 
     def _points_to_numpy(self, points):
         rows = []
@@ -326,13 +449,20 @@ class LidarObstacleAvoid(object):
             return STATE_SENSOR_TIMEOUT
 
         front = self.regions["front"]
-        if front.point_count < self.min_points or front.min_distance >= self.slow_distance:
+        if front.point_count < self.min_points:
             return STATE_CLEAR
-        if front.min_distance > self.stop_distance:
+        front_clearance = self._front_clearance()
+        if self.state == STATE_BLOCKED and front_clearance < self.blocked_exit_distance:
+            return STATE_BLOCKED
+        if front_clearance >= self.blocked_enter_distance:
+            if self.state == STATE_SLOW and front_clearance < self.slow_clear_distance:
+                return STATE_SLOW
+            if front_clearance > self.slow_distance:
+                return STATE_CLEAR
             return STATE_SLOW
 
-        left_clearance = self._region_clearance("left")
-        right_clearance = self._region_clearance("right")
+        left_clearance = self._smoothed_clearance("left")
+        right_clearance = self._smoothed_clearance("right")
         left_safe = self._side_safe("left")
         right_safe = self._side_safe("right")
 
@@ -353,6 +483,12 @@ class LidarObstacleAvoid(object):
             return STATE_AVOID_RIGHT
         return STATE_BLOCKED
 
+    def _smoothed_clearance(self, name):
+        values = self.left_clearance_history if name == "left" else self.right_clearance_history
+        if not values:
+            return self._region_clearance(name)
+        return float(np.median(np.asarray(values, dtype=np.float64)))
+
     def _held_direction_state(self, left_safe, right_safe, left_clearance, right_clearance):
         if self.avoid_since == rospy.Time(0):
             return None
@@ -370,6 +506,9 @@ class LidarObstacleAvoid(object):
         if region.point_count < self.min_points:
             return self.roi_max_x
         return region.min_distance
+
+    def _front_clearance(self):
+        return max(0.0, self.regions["front"].min_distance - self.front_footprint_x)
 
     def _side_safe(self, name):
         region = self.regions[name]
@@ -395,10 +534,14 @@ class LidarObstacleAvoid(object):
 
         old_state = self.state
         self.state = desired_state
+        self.state_since = rospy.Time.now()
         self.pending_state = None
         self.pending_count = 0
         if self.state in (STATE_AVOID_LEFT, STATE_AVOID_RIGHT):
-            self.avoid_direction = "left" if self.state == STATE_AVOID_LEFT else "right"
+            new_direction = "left" if self.state == STATE_AVOID_LEFT else "right"
+            if new_direction != self.avoid_direction:
+                self.selected_direction_since = rospy.Time.now()
+            self.avoid_direction = new_direction
             self.avoid_since = rospy.Time.now()
         rospy.loginfo("[obstacle_avoid] %s -> %s", old_state, self.state)
 
@@ -417,10 +560,10 @@ class LidarObstacleAvoid(object):
         if self.state == STATE_CLEAR:
             return out
         if self.state == STATE_SLOW:
-            out.linear.x = cmd.linear.x * self._slow_scale()
+            out.linear.x = self._obstacle_speed(cmd.linear.x)
             return out
         if self.state == STATE_AVOID_LEFT:
-            out.linear.x = self._avoid_linear(cmd.linear.x)
+            out.linear.x = self._obstacle_speed(cmd.linear.x)
             out.angular.z = self._clamp(
                 cmd.angular.z + self.avoid_angular_vel,
                 -self.max_output_angular_vel,
@@ -428,7 +571,7 @@ class LidarObstacleAvoid(object):
             )
             return out
         if self.state == STATE_AVOID_RIGHT:
-            out.linear.x = self._avoid_linear(cmd.linear.x)
+            out.linear.x = self._obstacle_speed(cmd.linear.x)
             out.angular.z = self._clamp(
                 cmd.angular.z - self.avoid_angular_vel,
                 -self.max_output_angular_vel,
@@ -448,6 +591,27 @@ class LidarObstacleAvoid(object):
     def _avoid_linear(self, raw_x):
         scaled = raw_x * self.avoid_linear_scale
         return min(raw_x, max(self.min_effective_linear_vel, scaled))
+
+    def _allowed_forward(self, raw_x):
+        if raw_x <= 1e-3:
+            return 0.0
+        return min(self.max_output_linear_vel, max(self.min_effective_forward_vel, raw_x))
+
+    def _obstacle_speed(self, raw_x):
+        if raw_x <= 1e-3:
+            return 0.0
+        clearance = self._front_clearance()
+        if clearance <= self.blocked_enter_distance:
+            return 0.0
+        if clearance >= self.slow_distance:
+            return min(raw_x, self.max_output_linear_vel)
+        span = max(self.slow_distance - self.blocked_enter_distance, 1e-3)
+        speed = self.max_output_linear_vel * (
+            clearance - self.blocked_enter_distance
+        ) / span
+        if speed < self.min_effective_forward_vel:
+            return 0.0
+        return min(raw_x, speed, self.max_output_linear_vel)
 
     def _slow_scale(self):
         front_d = self.regions["front"].min_distance
@@ -470,7 +634,8 @@ class LidarObstacleAvoid(object):
         msg.header.stamp = rospy.Time.now()
         msg.header.frame_id = self.base_frame
         msg.state = self.state
-        msg.front_distance = self.regions["front"].min_distance
+        msg.raw_front_distance = self.regions["front"].min_distance
+        msg.front_distance = self._front_clearance()
         msg.left_clearance = self._region_clearance("left")
         msg.right_clearance = self._region_clearance("right")
         msg.front_points = self.regions["front"].point_count
@@ -480,9 +645,40 @@ class LidarObstacleAvoid(object):
         msg.left_occupancy = self.regions["left"].occupancy
         msg.right_occupancy = self.regions["right"].occupancy
         msg.pointcloud_age = self._pointcloud_age()
+        msg.state_age = self._state_age()
+        msg.selected_direction_age = self._selected_direction_age()
+        msg.raw_points = self.filter_counts["raw_points"]
+        msg.after_tf_points = self.filter_counts["after_tf_points"]
+        msg.after_self_filter_points = self.filter_counts["after_self_filter_points"]
+        msg.after_roi_points = self.filter_counts["after_roi_points"]
+        msg.after_ground_points = self.filter_counts["after_ground_points"]
+        msg.min_x = self.bounds["min_x"]
+        msg.max_x = self.bounds["max_x"]
+        msg.min_y = self.bounds["min_y"]
+        msg.max_y = self.bounds["max_y"]
+        msg.min_z = self.bounds["min_z"]
+        msg.max_z = self.bounds["max_z"]
         msg.obstacle_detected = self.regions["front"].point_count >= self.min_points
         msg.fail_safe_active = self.state == STATE_SENSOR_TIMEOUT and self.fail_safe_stop
         self.status_pub.publish(msg)
+        rospy.loginfo_throttle(
+            1.0,
+            "[obstacle_distance] raw_front_distance=%.2f front_clearance=%.2f "
+            "thresholds(blocked=%.2f exit=%.2f slow=%.2f)",
+            self.regions["front"].min_distance,
+            self._front_clearance(),
+            self.blocked_enter_distance,
+            self.blocked_exit_distance,
+            self.slow_distance,
+        )
+
+    def _state_age(self):
+        return max(0.0, (rospy.Time.now() - self.state_since).to_sec())
+
+    def _selected_direction_age(self):
+        if self.selected_direction_since == rospy.Time(0):
+            return 0.0
+        return max(0.0, (rospy.Time.now() - self.selected_direction_since).to_sec())
 
     def _publish_markers(self, obstacle_points=None):
         obstacle_points = obstacle_points if obstacle_points is not None else self._all_region_points()

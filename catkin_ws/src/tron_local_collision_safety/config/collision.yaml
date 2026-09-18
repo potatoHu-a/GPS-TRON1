@@ -1,0 +1,45 @@
+cloud_topic: /livox/lidar_filter1
+input_cmd_topic: /open_nav/cmd_vel_raw
+output_cmd_topic: /open_nav/cmd_vel
+status_topic: /open_nav/obstacle_status
+marker_topic: /open_nav/obstacle_markers
+
+base_frame: body
+pointcloud_timeout: 0.8
+tf_timeout: 0.1
+
+# Official TRON1 rectangular footprint in the body frame.
+footprint:
+  - [-0.6, -0.25]
+  - [-0.6, 0.25]
+  - [0.6, 0.25]
+  - [0.6, -0.25]
+
+prediction:
+  horizon: 2.0
+  dt: 0.1
+
+height_filter:
+  min_z: -0.2
+  max_z: 1.5
+
+range_filter:
+  min_range: 0.1
+  max_range: 8.0
+
+grid:
+  x_min: -2.0
+  x_max: 8.0
+  y_min: -3.0
+  y_max: 3.0
+  resolution: 0.05
+
+# A predicted footprint closer than this distance enters SLOW.
+safety_distance: 0.5
+
+# SLOW scales every Twist component equally to preserve direction and curvature.
+slow_scale_min: 0.35
+slow_scale_max: 0.70
+
+status_publish_rate: 10.0
+marker_max_points: 3000

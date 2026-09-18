@@ -35,6 +35,7 @@ class WaypointTracker(object):
         self.goal_tol = rospy.get_param("~goal_tolerance", 0.5)
         self.min_v = rospy.get_param("~min_linear_vel", 0.4)
         self.max_v = rospy.get_param("~max_linear_vel", 0.5)
+        self.min_effective_forward_v = rospy.get_param("~min_effective_forward_vel", 0.5)
         self.max_w = rospy.get_param("~max_angular_vel", 0.4)
         self.rate_hz = rospy.get_param("~control_rate", 20.0)
         self.use_map_waypoints = rospy.get_param("~use_map_waypoints", False)
@@ -324,7 +325,12 @@ class WaypointTracker(object):
 
         turn_scale = max(0.35, 1.0 - abs(heading_err) / math.pi)
         cmd.linear.x = speed * turn_scale
-        cmd.angular.z = max(-self.max_w, min(self.max_w, cmd.linear.x * curvature))
+        if abs(heading_err) < (0.5 * math.pi) and cmd.linear.x > 1e-3:
+            cmd.linear.x = min(self.max_v, max(self.min_effective_forward_v, cmd.linear.x))
+            cmd.angular.z = max(-self.max_w, min(self.max_w, cmd.linear.x * curvature))
+        else:
+            cmd.linear.x = 0.0
+            cmd.angular.z = self.max_w if heading_err > 0.0 else -self.max_w
         return cmd
 
     def control_loop(self, _event):

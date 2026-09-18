@@ -1,0 +1,7 @@
+# Stage 2.4 real-robot acceptance limits. These values document and monitor
+# the first-motion envelope; they do not rewrite waypoint_tracker commands.
+base_frame: body
+max_linear_velocity: 0.2
+max_angular_velocity: 0.2
+pointcloud_timeout: 0.5
+stop_distance: 0.8

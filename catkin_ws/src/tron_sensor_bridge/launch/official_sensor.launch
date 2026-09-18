@@ -1,0 +1,31 @@
+<launch>
+  <!--
+    Thin overlay wrapper around the official sensor packages.
+    Source external workspaces with start_sensor.sh before invoking this launch.
+  -->
+  <arg name="start_livox" default="true"/>
+  <arg name="start_fastlio" default="true"/>
+  <arg name="lidar_model" default="livox_mid360"/>
+  <arg name="rviz" default="false"/>
+  <arg name="livox_frame" default="livox_frame"/>
+  <arg name="livox_publish_frequency" default="10.0"/>
+  <arg name="odom_topic" default="/Odometry"/>
+  <arg name="registered_cloud_topic" default="/cloud_registered"/>
+
+  <include if="$(arg start_livox)"
+           file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360.launch">
+    <arg name="rviz_enable" value="false"/>
+    <arg name="rosbag_enable" value="false"/>
+    <arg name="msg_frame_id" value="$(arg livox_frame)"/>
+    <arg name="publish_freq" value="$(arg livox_publish_frequency)"/>
+  </include>
+
+  <!-- run.launch starts FAST-LIO, localization, lidar_filter1 and scan conversion. -->
+  <include if="$(arg start_fastlio)"
+           file="$(find fast_lio_localization_sc_qn)/launch/run.launch">
+    <arg name="rviz" value="$(arg rviz)"/>
+    <arg name="lidar" value="$(arg lidar_model)"/>
+    <arg name="odom_topic" value="$(arg odom_topic)"/>
+    <arg name="lidar_topic" value="$(arg registered_cloud_topic)"/>
+  </include>
+</launch>

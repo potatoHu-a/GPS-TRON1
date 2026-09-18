@@ -117,10 +117,13 @@ catkin_install_python(PROGRAMS
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-install(PROGRAMS scripts/check_system.sh
+install(PROGRAMS
+  scripts/check_system.sh
+  scripts/start_gps_nav.sh
+  scripts/start_mapviz.sh
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-install(DIRECTORY launch config docs include
+install(DIRECTORY launch config docs include maps
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
