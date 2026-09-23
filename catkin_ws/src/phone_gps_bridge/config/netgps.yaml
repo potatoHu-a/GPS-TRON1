@@ -5,3 +5,5 @@ connect_timeout: 5.0
 receive_timeout: 5.0
 publish_magnetic_heading: true
 validate_checksum: true
+gst_max_age: 1.0
+debug_unknown_sentences: false

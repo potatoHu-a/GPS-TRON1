@@ -2,7 +2,7 @@
 <package format="2">
   <name>phone_gps_bridge</name>
   <version>0.1.0</version>
-  <description>Receive phone GPS NMEA over UDP and publish ROS NavSatFix</description>
+  <description>Receive NMEA over TCP, UDP, or USB serial and publish ROS GPS topics.</description>
 
   <maintainer email="user@todo.todo">user</maintainer>
   <license>MIT</license>
@@ -16,6 +16,7 @@
   <depend>nav_msgs</depend>
   <depend>visualization_msgs</depend>
   <depend>tf2_ros</depend>
+  <exec_depend>python3-serial</exec_depend>
 
   <export>
   </export>

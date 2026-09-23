@@ -23,6 +23,22 @@ separate terminals in this order:
 ~/catkin_ws/run/check_runtime.sh
 ```
 
+GPS input modes:
+
+```bash
+# Existing phone NetGPS TCP mode (also the default when omitted)
+~/catkin_ws/run/start_phone_gps.sh tcp
+
+# South GNSS USB serial mode, 115200 8N1
+~/catkin_ws/run/start_phone_gps.sh serial
+```
+
+The serial mode defaults to
+`/dev/serial/by-id/usb-1a86_USB_Single_Serial_5C84345474-if00`. RMC course over
+ground is published on `/gps/course`; it is not true robot heading and is never
+published on `/gps/heading`. True heading requires a verified HDT/HDG or future
+dual-antenna attitude sentence.
+
 Use `TRON_WS=/path/to/catkin_ws` when the scripts are not installed directly
 below the intended workspace. External official workspaces may be supplied as
 `LIVOX_WS` and `FASTLIO_WS`; their `local_setup.bash` files are used when

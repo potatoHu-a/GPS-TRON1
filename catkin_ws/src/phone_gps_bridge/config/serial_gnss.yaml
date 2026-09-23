@@ -1,0 +1,14 @@
+device: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5C84345474-if00
+baudrate: 115200
+bytesize: 8
+parity: none
+stopbits: 1
+software_flow_control: false
+hardware_flow_control: false
+frame_id: gps_link
+validate_checksum: true
+reconnect_interval: 2.0
+read_timeout: 1.0
+gst_max_age: 1.0
+publish_magnetic_heading: true
+debug_unknown_sentences: false
