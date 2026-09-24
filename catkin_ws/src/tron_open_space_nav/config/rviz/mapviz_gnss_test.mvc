@@ -1,0 +1,42 @@
+capture_directory: "~"
+fixed_frame: wgs84
+target_frame: wgs84
+fix_orientation: false
+rotate_90: false
+enable_antialiasing: true
+show_displays: true
+show_status_bar: true
+show_capture_tools: true
+window_width: 1600
+window_height: 900
+view_scale: 1.0
+offset_x: 0
+offset_y: 0
+use_latest_transforms: true
+background: "#a0a0a4"
+image_transport: raw
+displays:
+  - type: mapviz_plugins/tile_map
+    name: Wuhan Offline Tiles
+    config:
+      visible: true
+      collapsed: false
+      custom_sources:
+        - base_url: file:///root/catkin_ws/src/tron_open_space_nav/maps/wuhan_tiles/{level}/{x}/{y}.png
+          max_zoom: 18
+          name: OfflineTiles
+          type: wmts
+      bing_api_key: ""
+      stadia_api_key: ""
+      source: OfflineTiles
+  - type: mapviz_plugins/navsat
+    name: South GNSS Fix
+    config:
+      visible: true
+      collapsed: false
+      topic: /gps/fix
+      color: "#00ff00"
+      draw_style: points
+      use_latest_transforms: true
+      position_tolerance: 0.0
+      buffer_size: 600

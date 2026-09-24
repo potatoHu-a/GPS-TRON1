@@ -59,3 +59,81 @@ GPS fusion remains part of `start_gps_nav.sh`, so it is not started a second
 time by the localization entrypoint. Existing `/livox_lidar_publisher2`, `/livox_driver`,
 `/laserMapping`, `/fast_lio_localization_sc_qn_node`, and
 `/gps_fastlio_fusion` nodes are detected and never started twice.
+
+## Local South GNSS Mapviz Test
+
+This standalone mode displays only the Wuhan offline tile map and `/gps/fix`.
+It does not start or require robot navigation, FAST-LIO, GPS fusion,
+`map`, or `open_base`.
+
+The installed Mapviz NavSat plugin cannot consume latitude/longitude until its
+`LocalXyUtil` has a geographic origin. The test launch therefore uses the
+official `swri_transform_util/initialize_origin.py` node with the geographic
+center of `wuhan_tiles/metadata.json` as a dedicated `gnss_local` projection
+origin. This does not fabricate a GPS fix or a robot transform and is isolated
+from the formal `map` navigation frame. Mapviz Fixed Frame and Target Frame
+are both `wgs84`; `gnss_local` is used only inside the standard geographic
+transformer.
+
+On the host, expose the receiver as a TCP stream:
+
+```bash
+sudo chmod 666 /dev/ttyACM0
+socat -d -d \
+  TCP-LISTEN:10110,reuseaddr \
+  FILE:/dev/ttyACM0,b115200,raw,echo=0
+```
+
+In container terminal 1, start the local ROS master:
+
+```bash
+export ROS_MASTER_URI=http://127.0.0.1:11311
+export ROS_IP=127.0.0.1
+roscore
+```
+
+In container terminal 2, start the existing TCP receiver:
+
+```bash
+source /opt/ros/noetic/setup.bash
+source ~/catkin_ws/devel_isolated/setup.bash
+export ROS_MASTER_URI=http://127.0.0.1:11311
+export ROS_IP=127.0.0.1
+rosrun phone_gps_bridge netgps_tcp_receiver.py \
+  _host:=127.0.0.1 \
+  _port:=10110 \
+  _frame_id:=gps_link \
+  _validate_checksum:=true \
+  _publish_magnetic_heading:=true
+```
+
+Allow the container to use the host X server:
+
+```bash
+xhost +local:root
+```
+
+Then, in container terminal 3:
+
+```bash
+~/catkin_ws/runtime_scripts/start_mapviz_gnss_test.sh
+```
+
+The script uses only `http://127.0.0.1:11311`; it never starts another
+`roscore`. If `/gps/fix` is not available yet it warns and still starts
+Mapviz. An indoor no-fix message (`STATUS_NO_FIX` with NaN coordinates) is
+correct: no GNSS point appears until the receiver obtains a valid outdoor fix.
+The tile map remains available because its projection origin is fixed to the
+center of the Wuhan tile set. With valid fixes, green points show the latest
+600 samples so stationary drift can be inspected.
+
+For a static accuracy experiment, fix the antenna outdoors for 5-10 minutes
+and record the raw observations:
+
+```bash
+rosbag record -O south_gnss_static /gps/fix /gps/course
+```
+
+Use the bag to calculate horizontal standard deviation, RMS, maximum drift,
+95% position spread, and compare them with GST covariance. Visual spread in
+Mapviz alone is not an absolute accuracy measurement.
