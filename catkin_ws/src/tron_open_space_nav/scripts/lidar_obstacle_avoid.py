@@ -92,6 +92,9 @@ class LidarObstacleAvoid(object):
         self.slowdown_factor = float(
             rospy.get_param("~slowdown_factor", rospy.get_param("~max_slowdown_factor", 0.35))
         )
+        self.obstacle_speed_scale = max(
+            0.0, float(rospy.get_param("~obstacle_speed_scale", 1.0))
+        )
         self.avoid_linear_scale = float(rospy.get_param("~avoid_linear_scale", 0.65))
         self.avoid_angular_vel = float(rospy.get_param("~avoid_angular_vel", 0.28))
         self.min_effective_linear_vel = float(rospy.get_param("~min_effective_linear_vel", 0.25))
@@ -171,6 +174,15 @@ class LidarObstacleAvoid(object):
             self.scan_topic if self.use_scan else self.cloud_topic,
             "scan" if self.use_scan else self.pointcloud_type,
             self.base_frame,
+        )
+        rospy.loginfo(
+            "[lidar_obstacle_avoid] speed tuning slow=%.2f stop=%.2f "
+            "slowdown_factor=%.2f obstacle_speed_scale=%.2f max=%.2f",
+            self.slow_distance,
+            self.stop_distance,
+            self.slowdown_factor,
+            self.obstacle_speed_scale,
+            self.max_output_linear_vel,
         )
 
     def _empty_regions(self):
@@ -606,9 +618,17 @@ class LidarObstacleAvoid(object):
         if clearance >= self.slow_distance:
             return min(raw_x, self.max_output_linear_vel)
         span = max(self.slow_distance - self.blocked_enter_distance, 1e-3)
-        speed = self.max_output_linear_vel * (
+        distance_scale = (
             clearance - self.blocked_enter_distance
         ) / span
+        speed_scale = self._clamp(
+            max(distance_scale, self.slowdown_factor), 0.0, 1.0
+        )
+        speed = (
+            self.max_output_linear_vel
+            * speed_scale
+            * self.obstacle_speed_scale
+        )
         if speed < self.min_effective_forward_vel:
             return 0.0
         return min(raw_x, speed, self.max_output_linear_vel)

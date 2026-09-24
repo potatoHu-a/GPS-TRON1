@@ -137,3 +137,23 @@ rosbag record -O south_gnss_static /gps/fix /gps/course
 Use the bag to calculate horizontal standard deviation, RMS, maximum drift,
 95% position spread, and compare them with GST covariance. Visual spread in
 Mapviz alone is not an absolute accuracy measurement.
+
+## Navigation Visualization Debug
+
+Use the independent Mapviz navigation view to separate GNSS history, actual
+motion, planned mission, and the current high-rate odometry pose:
+
+```bash
+~/catkin_ws/run/start_mapviz_navigation_test.sh
+```
+
+Use RViz for TF, RobotModel, Livox PointCloud2, raw `/Odometry`, and the actual
+path:
+
+```bash
+~/catkin_ws/run/start_navigation_debug_rviz.sh
+```
+
+Both launchers connect to the existing ROS master and do not start navigation
+or localization nodes. See `tron_open_space_nav/docs/NAV_VISUALIZATION_DEBUG.md`
+for display colors, topic ownership, rate checks, and obstacle speed tuning.

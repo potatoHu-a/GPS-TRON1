@@ -45,6 +45,7 @@
     </node>
     <node pkg="tron_open_space_nav" type="lidar_obstacle_avoid.py" name="lidar_obstacle_avoid" output="screen">
       <rosparam file="$(arg obstacle_config)" command="load"/>
+      <rosparam file="$(find tron_open_space_nav)/config/obstacle_speed.yaml" command="load"/>
     </node>
     <node pkg="tron_open_space_nav" type="nav_mode_manager.py" name="nav_mode_manager" output="screen"/>
     <node pkg="tron_open_space_nav" type="tron_controller_bridge.py" name="tron_controller_bridge" output="screen">
