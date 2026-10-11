@@ -1,6 +1,10 @@
 # GPS + wheel odometry fusion (independent open_map frame)
 gps_fix_topic: /gps/fix
 fastlio_odom_topic: /Odometry
+# TRON1 Mid-360 FAST-LIO publishes camera_init/body1 in FRD axes
+# (+X forward, +Y right, +Z down). Convert it once to ROS REP-103 FLU before
+# GPS fusion. Use rep103 only when the odometry source is already FLU.
+fastlio_frame_convention: frd
 
 odom_topic: /open_nav/odom
 map_frame: open_map
@@ -9,4 +13,5 @@ base_frame: open_base
 
 gps_update_min_interval: 0.5
 gps_position_alpha: 0.15
+stationary_correction_gain: 0.0
 publish_tf: true

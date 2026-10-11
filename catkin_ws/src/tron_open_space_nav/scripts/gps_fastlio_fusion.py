@@ -20,6 +20,8 @@ import tf2_ros
 from geometry_msgs.msg import PoseStamped, TransformStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import NavSatFix
+from std_srvs.srv import Trigger, TriggerResponse
+from tron_open_space_nav.srv import SetHeadingAlignment, SetHeadingAlignmentResponse
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
@@ -33,11 +35,13 @@ from geodetic_utils import (
     quaternion_to_yaw,
     yaw_to_quaternion,
 )
+from fastlio_frame import convert_fastlio_frd_to_flu, convert_fastlio_twist_frd_to_flu
 
 try:
-    from tron_open_space_nav.msg import LocalizationStatus
+    from tron_open_space_nav.msg import LocalizationStatus, HeadingStatus
 except ImportError:
     LocalizationStatus = None
+    HeadingStatus = None
 
 
 class GpsFastlioFusion(object):
@@ -52,11 +56,23 @@ class GpsFastlioFusion(object):
         self.map_frame = rospy.get_param("~map_frame", "map")
         self.odom_frame = rospy.get_param("~odom_frame", "open_odom")
         self.base_frame = rospy.get_param("~base_frame", "open_base")
+        self.fastlio_frame_convention = rospy.get_param(
+            "~fastlio_frame_convention", "frd"
+        ).strip().lower()
+        if self.fastlio_frame_convention not in ("frd", "rep103"):
+            raise rospy.ROSInitException(
+                "fastlio_frame_convention must be 'frd' or 'rep103'"
+            )
 
         self.gps_min_interval = float(rospy.get_param("~gps_update_min_interval", 0.5))
         self.gps_correction_gain = float(rospy.get_param("~gps_correction_gain", 0.12))
         self.gps_correction_max_step = float(
             rospy.get_param("~gps_correction_max_step", 0.5)
+        )
+        # Do not let stationary GPS noise move the fused pose. A positive
+        # value is reserved for deliberate stationary calibration.
+        self.stationary_correction_gain = float(
+            rospy.get_param("~stationary_correction_gain", 0.0)
         )
         self.gps_max_sigma = float(rospy.get_param("~gps_max_sigma", 8.0))
         self.gps_max_speed = float(rospy.get_param("~gps_max_speed", 3.0))
@@ -77,12 +93,27 @@ class GpsFastlioFusion(object):
         self.map_odom_x = 0.0
         self.map_odom_y = 0.0
         self.map_odom_yaw = 0.0
+        self.yaw_alignment_offset = 0.0
+        self.heading_aligned = False
+        self.heading_source = "UNALIGNED"
+        self.calibration_reference_distance = 0.0
+        self._last_odom_stamp = rospy.Time(0)
+        self._last_odom_seq = None
+        self._last_odom_x = None
+        self._last_odom_y = None
+        self.reinit_jump = float(rospy.get_param("~heading/reinit_position_jump", 5.0))
+        self.reinit_seq_drop = int(rospy.get_param("~heading/reinit_seq_drop", 100))
 
         self.odom_x = 0.0
         self.odom_y = 0.0
+        self.odom_z = 0.0
         self.odom_yaw = 0.0
         self.odom_vx = 0.0
         self.odom_wz = 0.0
+        self.raw_odom_x = 0.0
+        self.raw_odom_y = 0.0
+        self.raw_odom_z = 0.0
+        self.raw_odom_yaw = 0.0
         self.have_odom = False
 
         self.gps_x = 0.0
@@ -99,6 +130,15 @@ class GpsFastlioFusion(object):
         else:
             self.status_pub = None
 
+        self.heading_status_pub = (
+            rospy.Publisher("/open_nav/heading/status", HeadingStatus, queue_size=1, latch=True)
+            if HeadingStatus is not None else None
+        )
+        rospy.Service("/open_nav/heading/set_alignment", SetHeadingAlignment,
+                      self._set_heading_alignment)
+        rospy.Service("/open_nav/heading/clear_alignment", Trigger,
+                      self._clear_heading_alignment)
+
         if self.use_filtered_pose:
             rospy.Subscriber(
                 self.gps_pose_topic, PoseStamped, self.gps_pose_callback, queue_size=10
@@ -107,12 +147,31 @@ class GpsFastlioFusion(object):
         self.odom_sub = rospy.Subscriber(self.odom_in_topic, Odometry, self.odom_callback, queue_size=50)
 
         rospy.loginfo(
-            "[gps_fastlio_fusion] gps_pose=%s gain=%.3f max_step=%.2f odom_in=%s",
+            "[gps_fastlio_fusion] gps_pose=%s gain=%.3f stationary_gain=%.3f "
+            "max_step=%.2f odom_in=%s convention=%s",
             self.gps_pose_topic if self.use_filtered_pose else self.gps_topic,
             self.gps_correction_gain,
+            self.stationary_correction_gain,
             self.gps_correction_max_step,
             self.odom_in_topic,
+            self.fastlio_frame_convention,
         )
+        self._publish_heading_status(rospy.Time.now())
+
+    def _effective_map_yaw(self):
+        yaw = self.map_odom_yaw
+        if self.heading_aligned:
+            yaw = normalize_angle(yaw + self.yaw_alignment_offset)
+        return yaw
+
+    def _clear_heading_state(self, reason):
+        if not self.heading_aligned and self.yaw_alignment_offset == 0.0:
+            return
+        self.heading_aligned = False
+        self.yaw_alignment_offset = 0.0
+        self.calibration_reference_distance = 0.0
+        self.heading_source = "UNALIGNED"
+        rospy.logwarn_throttle(2.0, "[gps_fastlio_fusion] %s; heading alignment cleared", reason)
 
     def _wait_origin(self):
         if self.origin_ready:
@@ -123,12 +182,53 @@ class GpsFastlioFusion(object):
         return False
 
     def _compose_map_pose(self):
-        cos_m = math.cos(self.map_odom_yaw)
-        sin_m = math.sin(self.map_odom_yaw)
+        rotation_yaw = self._effective_map_yaw()
+        cos_m = math.cos(rotation_yaw)
+        sin_m = math.sin(rotation_yaw)
         map_x = self.map_odom_x + cos_m * self.odom_x - sin_m * self.odom_y
         map_y = self.map_odom_y + sin_m * self.odom_x + cos_m * self.odom_y
-        map_yaw = normalize_angle(self.map_odom_yaw + self.odom_yaw)
+        map_yaw = normalize_angle(rotation_yaw + self.odom_yaw)
         return map_x, map_y, map_yaw
+
+    def _set_heading_alignment(self, request):
+        if not self.have_odom:
+            return SetHeadingAlignmentResponse(
+                False, "waiting for FAST-LIO odometry", 0.0, 0.0, 0.0
+            )
+        if not math.isfinite(request.yaw_offset):
+            return SetHeadingAlignmentResponse(
+                False, "yaw_offset is not finite", 0.0, 0.0, 0.0
+            )
+        # Rebase the translation at the current raw FAST-LIO pose before
+        # changing rotation. This keeps the fused map position continuous at
+        # the instant the manual heading alignment is applied.
+        old_map_x, old_map_y, _old_map_yaw = self._compose_map_pose()
+        new_offset = normalize_angle(request.yaw_offset)
+        new_rotation = normalize_angle(self.map_odom_yaw + new_offset)
+        cos_new = math.cos(new_rotation)
+        sin_new = math.sin(new_rotation)
+        self.map_odom_x = old_map_x - (cos_new * self.odom_x - sin_new * self.odom_y)
+        self.map_odom_y = old_map_y - (sin_new * self.odom_x + cos_new * self.odom_y)
+        self.yaw_alignment_offset = new_offset
+        self.calibration_reference_distance = max(0.0, float(request.reference_distance))
+        self.heading_source = request.source or "MANUAL"
+        self.heading_aligned = True
+        stamp = self._last_odom_stamp if self._last_odom_stamp != rospy.Time(0) else rospy.Time.now()
+        self._publish(stamp)
+        global_yaw = self._compose_map_pose()[2]
+        return SetHeadingAlignmentResponse(
+            True,
+            "heading alignment applied",
+            float(self.odom_yaw),
+            float(self.yaw_alignment_offset),
+            float(global_yaw),
+        )
+
+    def _clear_heading_alignment(self, _request):
+        self._clear_heading_state("manual clear_alignment request")
+        stamp = self._last_odom_stamp if self._last_odom_stamp != rospy.Time(0) else rospy.Time.now()
+        self._publish(stamp)
+        return TriggerResponse(True, "heading alignment cleared")
 
     def _reject_gps_fix(self, msg):
         sigma = navsat_horizontal_sigma(msg)
@@ -185,8 +285,10 @@ class GpsFastlioFusion(object):
         err_x = east - robot_x
         err_y = north - robot_y
 
-        speed = math.hypot(self.odom_vx, 0.0)
-        if speed < self.stationary_speed:
+        speed = abs(self.odom_vx)
+        stationary = speed < self.stationary_speed
+        correction_gain = self.gps_correction_gain
+        if stationary:
             self._stationary_gps_e.append(east)
             self._stationary_gps_n.append(north)
             if len(self._stationary_gps_e) >= max(5, self.stationary_window // 2):
@@ -194,14 +296,24 @@ class GpsFastlioFusion(object):
                 med_n = median_value(list(self._stationary_gps_n))
                 err_x = med_e - robot_x
                 err_y = med_n - robot_y
+            correction_gain = self.stationary_correction_gain
+
+        if correction_gain <= 0.0:
+            if stationary:
+                rospy.logwarn_throttle(
+                    10.0,
+                    "[gps_fastlio_fusion] stationary FAST-LIO; GPS correction frozen "
+                    "(GPS drift is not treated as robot motion)",
+                )
+            return
 
         step_x = max(
             -self.gps_correction_max_step,
-            min(self.gps_correction_max_step, self.gps_correction_gain * err_x),
+            min(self.gps_correction_max_step, correction_gain * err_x),
         )
         step_y = max(
             -self.gps_correction_max_step,
-            min(self.gps_correction_max_step, self.gps_correction_gain * err_y),
+            min(self.gps_correction_max_step, correction_gain * err_y),
         )
         self.map_odom_x += step_x
         self.map_odom_y += step_y
@@ -239,30 +351,105 @@ class GpsFastlioFusion(object):
         if not self._wait_origin():
             return
 
-        self.odom_x = msg.pose.pose.position.x
-        self.odom_y = msg.pose.pose.position.y
+        stamp = msg.header.stamp if msg.header.stamp.to_sec() > 0.0 else rospy.Time.now()
+        pose_x = msg.pose.pose.position.x
+        pose_y = msg.pose.pose.position.y
+        restarted = (
+            self._last_odom_stamp != rospy.Time(0)
+            and stamp < self._last_odom_stamp - rospy.Duration(0.05)
+        )
+        pose_reset = (
+            self._last_odom_x is not None
+            and math.hypot(pose_x - self._last_odom_x, pose_y - self._last_odom_y) > self.reinit_jump
+        )
+        seq_reset = False
+        current_seq = msg.header.seq
+        if self._last_odom_seq is not None and current_seq < self._last_odom_seq - self.reinit_seq_drop:
+            seq_reset = True
+        if restarted or pose_reset or seq_reset:
+            reason = "FAST-LIO reset detected"
+            if restarted:
+                reason = "FAST-LIO timestamp reset detected"
+            elif seq_reset:
+                reason = "FAST-LIO sequence reset detected"
+            elif pose_reset:
+                reason = "FAST-LIO position jump detected"
+            self._clear_heading_state(reason)
         q = msg.pose.pose.orientation
-        self.odom_yaw = quaternion_to_yaw(q.x, q.y, q.z, q.w)
-        self.odom_vx = msg.twist.twist.linear.x
-        self.odom_wz = msg.twist.twist.angular.z
+        raw_orientation = (q.x, q.y, q.z, q.w)
+        self.raw_odom_x = pose_x
+        self.raw_odom_y = pose_y
+        self.raw_odom_z = msg.pose.pose.position.z
+        self.raw_odom_yaw = quaternion_to_yaw(*raw_orientation)
+        raw_linear = (
+            msg.twist.twist.linear.x,
+            msg.twist.twist.linear.y,
+            msg.twist.twist.linear.z,
+        )
+        raw_angular = (
+            msg.twist.twist.angular.x,
+            msg.twist.twist.angular.y,
+            msg.twist.twist.angular.z,
+        )
+        if self.fastlio_frame_convention == "frd":
+            position, orientation = convert_fastlio_frd_to_flu(
+                (self.raw_odom_x, self.raw_odom_y, self.raw_odom_z),
+                raw_orientation,
+            )
+            linear, angular = convert_fastlio_twist_frd_to_flu(
+                raw_linear, raw_angular
+            )
+        else:
+            position, orientation = (
+                (self.raw_odom_x, self.raw_odom_y, self.raw_odom_z),
+                raw_orientation,
+            )
+            linear, angular = raw_linear, raw_angular
+        self.odom_x, self.odom_y, self.odom_z = position
+        self.odom_yaw = quaternion_to_yaw(*orientation)
+        self.odom_vx = linear[0]
+        self.odom_wz = angular[2]
         self.have_odom = True
 
-        stamp = msg.header.stamp if msg.header.stamp.to_sec() > 0.0 else rospy.Time.now()
+        self._last_odom_stamp = stamp
+        self._last_odom_seq = current_seq
+        self._last_odom_x = pose_x
+        self._last_odom_y = pose_y
         self._publish(stamp)
 
-    def _publish_status(self, stamp):
-        if self.status_pub is None:
+    def _publish_heading_status(self, stamp):
+        if self.heading_status_pub is None:
             return
-        msg = LocalizationStatus()
-        msg.header.stamp = stamp
-        msg.header.frame_id = self.map_frame
-        msg.gps_sigma = float(self._last_gps_sigma)
-        msg.gps_fix_valid = True
-        msg.gps_rejected_count = self._gps_rejected
-        msg.gps_correction_offset_x = float(self.map_odom_x)
-        msg.gps_correction_offset_y = float(self.map_odom_y)
-        msg.note = "fusion_offset"
-        self.status_pub.publish(msg)
+        heading = HeadingStatus()
+        heading.header.stamp = stamp
+        heading.header.frame_id = self.map_frame
+        heading.aligned = self.heading_aligned
+        heading.source = self.heading_source
+        heading.fastlio_yaw = float(self.odom_yaw if self.have_odom else 0.0)
+        heading.raw_fastlio_x = float(self.raw_odom_x if self.have_odom else 0.0)
+        heading.raw_fastlio_y = float(self.raw_odom_y if self.have_odom else 0.0)
+        heading.raw_fastlio_yaw = float(self.raw_odom_yaw if self.have_odom else 0.0)
+        heading.normalized_fastlio_x = float(self.odom_x if self.have_odom else 0.0)
+        heading.normalized_fastlio_y = float(self.odom_y if self.have_odom else 0.0)
+        heading.normalized_fastlio_yaw = float(self.odom_yaw if self.have_odom else 0.0)
+        heading.yaw_offset = float(self.yaw_alignment_offset if self.heading_aligned else 0.0)
+        heading.global_yaw = float(self._compose_map_pose()[2] if self.have_odom else 0.0)
+        heading.calibration_reference_distance = float(self.calibration_reference_distance)
+        self.heading_status_pub.publish(heading)
+
+    def _publish_status(self, stamp):
+        if self.status_pub is not None:
+            msg = LocalizationStatus()
+            msg.header.stamp = stamp
+            msg.header.frame_id = self.map_frame
+            msg.gps_sigma = float(self._last_gps_sigma)
+            msg.gps_fix_valid = True
+            msg.gps_rejected_count = self._gps_rejected
+            msg.gps_correction_offset_x = float(self.map_odom_x)
+            msg.gps_correction_offset_y = float(self.map_odom_y)
+            msg.note = "fusion_offset"
+            self.status_pub.publish(msg)
+        self._publish_heading_status(stamp)
 
     def _publish(self, stamp):
         map_x, map_y, map_yaw = self._compose_map_pose()
@@ -294,7 +481,7 @@ class GpsFastlioFusion(object):
         t_map_odom.transform.translation.x = self.map_odom_x
         t_map_odom.transform.translation.y = self.map_odom_y
         t_map_odom.transform.translation.z = 0.0
-        qmx, qmy, qmz, qmw = yaw_to_quaternion(self.map_odom_yaw)
+        qmx, qmy, qmz, qmw = yaw_to_quaternion(self._effective_map_yaw())
         t_map_odom.transform.rotation.x = qmx
         t_map_odom.transform.rotation.y = qmy
         t_map_odom.transform.rotation.z = qmz

@@ -15,7 +15,8 @@ base_frame: open_base
 
 # All ROI limits are evaluated after TF conversion into base_frame.
 # Assumption in base_frame: +X forward, +Y left, +Z up.
-robot_width: 0.70
+robot_length: 1.20
+robot_width: 0.50
 safety_margin: 0.15
 side_region_width: 0.55
 
@@ -27,23 +28,37 @@ roi_min_z: -0.35
 roi_max_z: 1.40
 ground_z_max: 0.08
 
+self_filter_enabled: true
+self_filter_min_x: -0.50
+self_filter_max_x: 0.70
+self_filter_min_y: -0.50
+self_filter_max_y: 0.50
+self_filter_min_z: -0.50
+self_filter_max_z: 1.20
+
 check_min_range: 0.25
 check_max_range: 4.0
 slow_distance: 2.0
+slow_clear_distance: 2.3
 stop_distance: 0.8
+blocked_enter_distance: 0.8
+blocked_exit_distance: 1.0
 slowdown_factor: 0.35
 
 min_points: 5
-confirm_frames: 2
-clear_frames: 3
+confirm_frames: 3
+clear_frames: 5
 direction_hold_time: 1.5
 switch_margin: 0.35
 
 avoid_linear_scale: 0.65
 avoid_angular_vel: 0.28
 min_effective_linear_vel: 0.25
+min_effective_forward_vel: 0.2
+max_linear_vel: 0.5
 max_output_angular_vel: 0.4
 
 pointcloud_timeout: 0.8
 fail_safe_stop: true
 debug_markers: true
+debug_stats: true

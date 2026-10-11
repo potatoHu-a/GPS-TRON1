@@ -1,0 +1,22 @@
+# Stage 2.4 real-robot acceptance limits. These values document and monitor
+# the first-motion envelope; they do not rewrite waypoint_tracker commands.
+base_frame: body
+max_linear_velocity: 0.2
+max_angular_velocity: 0.2
+pointcloud_timeout: 0.5
+
+# Keep collision geometry identical in test mode. Velocity caps remain
+# documentation/acceptance limits and do not rewrite waypoint commands.
+inflation_radius: 0.65
+min_obstacle_dist: 0.50
+safety_margin: 0.05
+hard_stop_margin: 0.05
+braking:
+  deceleration: 0.80
+  reaction_time: 0.20
+
+forward_corridor:
+  enabled: true
+  length: 2.0
+  half_width: 0.40
+  min_speed: 0.02

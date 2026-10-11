@@ -1,0 +1,71 @@
+<launch>
+  <!-- Robot-side, non-GUI bringup. All consumers tolerate unavailable inputs. -->
+  <arg name="dry_run" default="true"/>
+  <arg name="enable_livox" default="true"/>
+  <arg name="enable_localization" default="true"/>
+  <arg name="enable_gnss" default="true"/>
+  <arg name="enable_navigation" default="true"/>
+  <arg name="enable_local_planner" default="true"/>
+  <arg name="enable_collision_safety" default="true"/>
+
+  <arg name="gnss_serial_device"
+       default="/dev/serial/by-id/usb-1a86_USB_Single_Serial_5C84345474-if00"/>
+  <arg name="gnss_baudrate" default="115200"/>
+  <arg name="robot_ws_url" default="ws://10.192.1.2:5000"/>
+  <arg name="robot_accid" default="WF_TRON1A_412"/>
+  <arg name="collision_config"
+       default="$(find tron_local_collision_safety)/config/collision.yaml"/>
+  <arg name="local_planner_config"
+       default="$(find tron_local_trajectory_planner)/config/planner.yaml"/>
+
+  <!-- Driver and localization remain independently switchable. -->
+  <group if="$(arg enable_livox)">
+    <include file="$(find tron_sensor_bridge)/launch/official_sensor.launch">
+      <arg name="start_livox" value="true"/>
+      <arg name="start_fastlio" value="false"/>
+      <arg name="rviz" value="false"/>
+    </include>
+  </group>
+
+  <group if="$(arg enable_localization)">
+    <include file="$(find tron_sensor_bridge)/launch/official_sensor.launch">
+      <arg name="start_livox" value="false"/>
+      <arg name="start_fastlio" value="true"/>
+      <arg name="rviz" value="false"/>
+    </include>
+  </group>
+
+  <group if="$(arg enable_gnss)">
+    <include file="$(find phone_gps_bridge)/launch/serial_gnss.launch">
+      <arg name="device" value="$(arg gnss_serial_device)"/>
+      <arg name="baudrate" value="$(arg gnss_baudrate)"/>
+    </include>
+  </group>
+
+  <group if="$(arg enable_navigation)">
+    <include file="$(find tron_open_space_nav)/launch/gps_global_nav.launch">
+      <arg name="dry_run" value="$(arg dry_run)"/>
+      <arg name="use_fake_gps" value="false"/>
+      <arg name="use_fake_fastlio" value="false"/>
+      <arg name="use_rviz" value="false"/>
+      <arg name="use_legacy_obstacle_avoid" value="false"/>
+      <arg name="robot_ws_url" value="$(arg robot_ws_url)"/>
+      <arg name="robot_accid" value="$(arg robot_accid)"/>
+    </include>
+  </group>
+
+  <!-- Shadow only: this package publishes no Twist topic. -->
+  <group if="$(arg enable_local_planner)">
+    <include file="$(find tron_local_trajectory_planner)/launch/local_trajectory_planner.launch">
+      <arg name="config_file" value="$(arg local_planner_config)"/>
+      <arg name="rviz" value="false"/>
+    </include>
+  </group>
+
+  <!-- Sole final velocity safety output in this bringup. -->
+  <group if="$(arg enable_collision_safety)">
+    <include file="$(find tron_local_collision_safety)/launch/collision_safety.launch">
+      <arg name="config_file" value="$(arg collision_config)"/>
+    </include>
+  </group>
+</launch>

@@ -1,0 +1,18 @@
+<launch>
+  <arg name="config_file" default="$(find tron_nav_dashboard)/config/dashboard.yaml"/>
+  <arg name="start_monitor" default="true"/>
+
+  <node if="$(arg start_monitor)"
+        pkg="tron_nav_dashboard"
+        type="navigation_debug_monitor.py"
+        name="navigation_debug_monitor"
+        output="screen"/>
+
+  <node pkg="tron_nav_dashboard"
+        type="navigation_dashboard.py"
+        name="tron_nav_dashboard"
+        output="screen"
+        required="true">
+    <rosparam command="load" file="$(arg config_file)"/>
+  </node>
+</launch>

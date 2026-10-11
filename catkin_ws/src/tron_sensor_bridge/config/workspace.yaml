@@ -1,0 +1,23 @@
+# External workspaces must be visible at these paths inside the GPS-TRON runtime.
+# Override this file with start_sensor.sh --config PATH when robot paths differ.
+ros:
+  setup_file: /opt/ros/noetic/setup.bash
+
+workspaces:
+  livox:
+    path: /home/tron/livox_ws
+    setup_file: /home/tron/livox_ws/devel/setup.bash
+  fastlio:
+    path: /home/tron/catkin_ws
+    setup_file: /home/tron/catkin_ws/devel_isolated/setup.bash
+  gps_tron:
+    path: /root/catkin_ws
+    setup_file: /root/catkin_ws/devel_isolated/setup.bash
+
+launch:
+  start_livox: true
+  start_fastlio: true
+  lidar_model: livox_mid360
+  rviz: false
+  livox_frame: livox_frame
+  livox_publish_frequency: 10.0

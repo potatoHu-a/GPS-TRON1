@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>tron_sensor_bridge</name>
+  <version>0.1.0</version>
+  <description>Overlay-based bringup and diagnostics for the TRON1 Livox and FAST-LIO sensor chain.</description>
+
+  <maintainer email="user@todo.todo">TRON1 Operator</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>roslaunch</exec_depend>
+  <exec_depend>rostopic</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>livox_ros_driver2</exec_depend>
+  <exec_depend>fast_lio</exec_depend>
+  <exec_depend>fast_lio_localization_sc_qn</exec_depend>
+  <exec_depend>pointcloud_to_laserscan</exec_depend>
+
+  <export/>
+</package>

@@ -1,0 +1,79 @@
+cloud_topic: /livox/lidar_filter1
+input_cmd_topic: /open_nav/cmd_vel_raw
+output_cmd_topic: /open_nav/cmd_vel
+status_topic: /open_nav/obstacle_status
+marker_topic: /open_nav/obstacle_markers
+
+base_frame: body
+pointcloud_timeout: 0.8
+tf_timeout: 0.1
+
+# TRON1 footprint used by the official sentry_navigation costmap and TEB.
+footprint:
+  - [-0.6, -0.25]
+  - [-0.6, 0.25]
+  - [0.6, 0.25]
+  - [0.6, -0.25]
+
+prediction:
+  horizon: 2.0
+  dt: 0.1
+
+height_filter:
+  # Applied after TF conversion into base_frame. The official configuration's
+  # optional PointCloud2 source uses -0.4..0.4 m (its active source is /scan).
+  min_z: -0.4
+  max_z: 0.4
+
+range_filter:
+  min_range: 0.1
+  max_range: 8.0
+
+grid:
+  x_min: -2.0
+  x_max: 8.0
+  y_min: -3.0
+  y_max: 3.0
+  resolution: 0.05
+
+# Costmap-style filtering. One point per cell matches the official obstacle
+# layer; increase only if isolated Livox returns are proven to be noise.
+obstacle_filter:
+  min_points_per_cell: 1
+
+# Official costmap inflation is a graded planning-cost field. It is visualized
+# by this safety layer but is not added to the footprint or used as STOP range.
+inflation_radius: 0.65
+
+# TEB measures this clearance from the configured footprint to an obstacle.
+# It is a trajectory optimization constraint, mapped here to SLOW rather than
+# an immediate hard stop.
+min_obstacle_dist: 0.50
+safety_margin: 0.05
+
+# Immediate STOP uses the physical footprint plus a small hard margin and a
+# velocity-dependent braking envelope. Official TEB sets acc_lim_x to 0.8.
+hard_stop_margin: 0.05
+braking:
+  deceleration: 0.80
+  reaction_time: 0.20
+
+# Direction-aware safety corridor. It extends in the commanded travel
+# direction; side and rear points outside the swept footprint do not trigger it.
+forward_corridor:
+  enabled: true
+  length: 2.0
+  half_width: 0.40
+  min_speed: 0.02
+
+# SLOW scales every Twist component equally to preserve direction and curvature.
+slow_scale_min: 0.35
+slow_scale_max: 0.70
+
+# Minimum usable TRON1 forward gait speed while an obstacle causes SLOW.
+# Applies only when the raw command is moving forward; STOP and pure rotation
+# remain zero/scaled respectively. Set to 0 to disable this protection.
+min_forward_output_velocity: 0.35
+
+status_publish_rate: 10.0
+marker_max_points: 3000

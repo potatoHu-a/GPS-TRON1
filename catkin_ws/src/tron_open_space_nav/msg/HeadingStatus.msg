@@ -1,0 +1,13 @@
+Header header
+bool aligned
+string source
+float64 fastlio_yaw
+float64 raw_fastlio_x
+float64 raw_fastlio_y
+float64 raw_fastlio_yaw
+float64 normalized_fastlio_x
+float64 normalized_fastlio_y
+float64 normalized_fastlio_yaw
+float64 yaw_offset
+float64 global_yaw
+float64 calibration_reference_distance

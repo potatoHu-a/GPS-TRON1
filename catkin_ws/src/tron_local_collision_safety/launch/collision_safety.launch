@@ -1,0 +1,12 @@
+<launch>
+  <arg name="config_file"
+       default="$(find tron_local_collision_safety)/config/collision.yaml"/>
+
+  <node pkg="tron_local_collision_safety"
+        type="collision_safety.py"
+        name="collision_safety"
+        output="screen"
+        required="true">
+    <rosparam command="load" file="$(arg config_file)"/>
+  </node>
+</launch>

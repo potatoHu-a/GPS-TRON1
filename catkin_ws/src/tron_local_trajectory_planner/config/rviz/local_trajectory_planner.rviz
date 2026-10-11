@@ -1,0 +1,102 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+  - Class: rviz/Views
+    Name: Views
+Visualization Manager:
+  Displays:
+    - Class: rviz/Grid
+      Enabled: true
+      Name: Grid
+      Alpha: 0.5
+      Cell Size: 1
+      Plane: XY
+      Reference Frame: map
+    - Class: rviz/TF
+      Enabled: true
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: false
+      Frame Timeout: 15
+    - Class: rviz/RobotModel
+      Enabled: true
+      Name: RobotModel
+      Robot Description: robot_description
+      TF Prefix: ""
+      Visual Enabled: true
+      Collision Enabled: false
+    - Class: rviz/PointCloud2
+      Enabled: true
+      Name: Livox Filtered Cloud
+      Topic: /livox/lidar_filter1
+      Queue Size: 5
+      Selectable: true
+      Style: Points
+      Size (Pixels): 2
+      Size (m): 0.03
+      Color Transformer: AxisColor
+      Axis: Z
+      Use Fixed Frame: true
+      Decay Time: 0
+      Alpha: 0.75
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Name: Local Plan Candidates
+      Marker Topic: /open_nav/local_plan_candidates
+      Queue Size: 10
+    - Class: rviz/Path
+      Enabled: true
+      Name: Best Local Plan
+      Topic: /open_nav/local_plan
+      Buffer Length: 1
+      Line Style: Lines
+      Line Width: 0.08
+      Color: 0; 255; 255
+    - Class: rviz/Path
+      Enabled: true
+      Name: Mission Path
+      Topic: /open_nav/mission_path
+      Buffer Length: 1
+      Line Style: Lines
+      Line Width: 0.03
+      Color: 0; 100; 255
+    - Class: rviz/Odometry
+      Enabled: true
+      Name: Robot Pose
+      Topic: /open_nav/odom
+      Keep: 1
+      Position Tolerance: 0.01
+      Angle Tolerance: 0.01
+      Shape:
+        Alpha: 1
+        Axes Length: 0.6
+        Axes Radius: 0.05
+        Color: 255; 40; 20
+        Head Length: 0.2
+        Head Radius: 0.1
+        Shaft Length: 0.6
+        Shaft Radius: 0.05
+        Value: Arrow
+  Global Options:
+    Background Color: 35; 35; 35
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+    - Class: rviz/FocusCamera
+    - Class: rviz/Measure
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 10
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Name: Current View
+      Pitch: 0.55
+      Yaw: 0.8

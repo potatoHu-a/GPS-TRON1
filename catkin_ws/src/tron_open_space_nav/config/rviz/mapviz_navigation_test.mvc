@@ -1,0 +1,77 @@
+capture_directory: "~"
+fixed_frame: map
+target_frame: open_base
+fix_orientation: false
+rotate_90: false
+enable_antialiasing: true
+show_displays: true
+show_status_bar: true
+show_capture_tools: true
+window_width: 1600
+window_height: 900
+view_scale: 1.0
+offset_x: 0
+offset_y: 0
+use_latest_transforms: true
+background: "#a0a0a4"
+image_transport: raw
+displays:
+  - type: mapviz_plugins/tile_map
+    name: Wuhan Offline Tiles
+    config:
+      visible: true
+      collapsed: false
+      custom_sources:
+        - base_url: file:///root/catkin_ws/src/tron_open_space_nav/maps/wuhan_tiles/{level}/{x}/{y}.png
+          max_zoom: 18
+          name: OfflineTiles
+          type: wmts
+      bing_api_key: ""
+      stadia_api_key: ""
+      source: OfflineTiles
+  - type: mapviz_plugins/navsat
+    name: GNSS Track
+    config:
+      visible: true
+      collapsed: false
+      topic: /gps/fix
+      color: "#00ff00"
+      draw_style: points
+      use_latest_transforms: true
+      position_tolerance: 0.0
+      buffer_size: 600
+  - type: mapviz_plugins/path
+    name: Robot Actual Track
+    config:
+      visible: true
+      collapsed: false
+      topic: /open_nav/path
+      color: "#ffff00"
+      draw_style: lines
+      position_tolerance: 0.0
+      buffer_size: 0
+  - type: mapviz_plugins/path
+    name: Planned Mission Path
+    config:
+      visible: true
+      collapsed: false
+      topic: /open_nav/mission_path
+      color: "#0080ff"
+      draw_style: lines
+      position_tolerance: 0.0
+      buffer_size: 0
+  - type: mapviz_plugins/odometry
+    name: Current Robot Pose
+    config:
+      visible: true
+      collapsed: false
+      topic: /Odometry
+      color: "#ff0000"
+      draw_style: arrows
+      position_tolerance: 0.0
+      buffer_size: 1
+      show_laps: false
+      show_covariance: false
+      show_all_covariances: false
+      static_arrow_sizes: true
+      arrow_size: 35

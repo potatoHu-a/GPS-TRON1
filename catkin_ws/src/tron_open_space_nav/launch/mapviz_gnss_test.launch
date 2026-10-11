@@ -1,0 +1,26 @@
+<launch>
+  <!-- Standalone GNSS visualization. No robot navigation or robot TF nodes. -->
+  <arg name="config"
+       default="$(find tron_open_space_nav)/config/rviz/mapviz_gnss_test.mvc"/>
+
+  <!-- Mapviz NavSat requires a local XY origin. Use the geographic center of
+       the Wuhan tile metadata bounds and keep it separate from robot map. -->
+  <node pkg="swri_transform_util" type="initialize_origin.py"
+        name="mapviz_gnss_test_origin" output="screen">
+    <param name="local_xy_frame" value="gnss_local"/>
+    <param name="local_xy_origin" value="wuhan_gnss_test"/>
+    <rosparam param="local_xy_origins">
+      [{name: wuhan_gnss_test,
+        latitude: 30.54715,
+        longitude: 114.356,
+        altitude: 0.0,
+        heading: 0.0}]
+    </rosparam>
+  </node>
+
+  <node pkg="mapviz" type="mapviz" name="mapviz_gnss_test" output="screen"
+        launch-prefix="bash -c 'sleep 1; exec &quot;$@&quot;' --">
+    <param name="config" value="$(arg config)"/>
+    <param name="auto_save_backup" value="false"/>
+  </node>
+</launch>

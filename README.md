@@ -1,271 +1,386 @@
-# GPS-TRON1 机器人端导航工程
+# GPS-TRON1
 
-这是 TRON1 机器人当前使用的 ROS1 Noetic 导航工作区源码备份，包含手机 GPS 接入、GPS/FAST-LIO 融合、航点跟踪、LiDAR 避障、TRON 控制桥接以及 Mapviz 地面站配置。
+TRON1 的 ROS1 Noetic 户外 GPS 导航、FAST-LIO 融合定位、局部碰撞安全、
+调试可视化和统一启动工程。
 
-仓库目标是让另一台 TRON1 机器人可以更容易复现当前部署。
+本仓库保留现有 waypoint 导航架构，不引入 `move_base`、TEB 或 Nav2，
+也不包含或修改官方 Livox、FAST-LIO、机器人底盘 SDK 源码。官方传感器与定位包
+作为外部 workspace 依赖，由本仓库的 overlay 启动层调用。
 
-## 目录结构
+> 当前状态：仅允许 `TEST` / `dry_run=true` 联调。传感器持续运行、GNSS 静止漂移、
+> 航向转换实机验证全部通过前，不应启动 REAL 导航。
+
+## 系统架构
+
+```text
+南方 GNSS USB / 手机 NetGPS
+              |
+              v
+          /gps/fix
+              |
+              v
+     gps_global_converter
+              |
+              v
+/open_nav/gps_filtered_pose       /Odometry (FAST-LIO FRD)
+              |                         |
+              +------> gps_fastlio_fusion
+                              |
+                              v
+                      /open_nav/odom
+                              |
+                              v
+                       waypoint_tracker
+                              |
+                              v
+                  /open_nav/cmd_vel_raw
+                              |
+                              v
+                     collision_safety
+                              |
+                              v
+                    /open_nav/cmd_vel
+                              |
+                              v
+                  tron_controller_bridge
+```
+
+局部轨迹规划器当前保持 `SHADOW`：
+
+```text
+/open_nav/odom + /open_nav/mission_path + /livox/lidar_filter1
+                              |
+                              v
+                 local_trajectory_planner
+                              |
+                              +--> /open_nav/local_plan
+                              +--> /open_nav/local_plan_candidates
+                              +--> /open_nav/local_planner/status
+```
+
+它只发布路径和诊断，不发布任何 `cmd_vel`。
+
+## 仓库内容
 
 ```text
 catkin_ws/
-  src/
-    phone_gps_bridge/        # 手机 NetGPS/NMEA -> ROS GPS topic
-    tron_open_nav/           # 早期 GPS open navigation 包
-    tron_open_space_nav/     # 当前 GPS 全局导航、融合、航点、避障、Mapviz
+├── runtime_scripts/                   # 用户直接执行的统一运行入口
+└── src/
+    ├── phone_gps_bridge/              # TCP、UDP、USB 串口 NMEA -> ROS
+    ├── tron_open_nav/                 # 早期兼容包
+    ├── tron_open_space_nav/           # GPS导航、融合、任务、控制桥与Mapviz
+    ├── tron_sensor_bridge/            # 官方 Livox/FAST-LIO overlay 启动适配
+    ├── tron_local_collision_safety/   # 最终速度安全仲裁层
+    ├── tron_local_trajectory_planner/ # 可视化 DWA 风格 SHADOW planner
+    └── tron_nav_dashboard/            # 地面站综合监控 Dashboard
 ```
 
-## 已包含的主要功能
+### 外部依赖
 
-- `phone_gps_bridge`
-  - NetGPS TCP 接收节点：`netgps_tcp_receiver.py`
-  - 保留旧 UDP 接收节点：`gps_udp_receiver.py`
-  - 发布 `/gps/fix`
-  - 发布 `/gps/heading`、`/gps/magnetic_heading`、`/gps/course`
+机器人环境需要提供：
 
-- `tron_open_space_nav`
-  - GPS WGS84 到 true-north ENU 转换
-  - FAST-LIO odometry 与 GPS 融合
-  - 多航点导航
-  - `/open_nav/cmd_vel_raw -> /open_nav/cmd_vel` LiDAR 避障层
-  - TRON1 WebSocket 控制桥接
-  - Mapviz 地面站与武汉瓦片地图
+- Ubuntu 20.04、ROS Noetic
+- `livox_ros_driver2`
+- `fast_lio`
+- `fast_lio_localization_sc_qn`
+- TRON1 官方驱动、描述与底盘控制环境
+- Mapviz、RViz、PyQt5（仅地面站需要）
 
-## 依赖环境
+这些官方包不复制进本仓库。可通过 `LIVOX_WS`、`FASTLIO_WS` 指定其 workspace。
 
-- Ubuntu 20.04
-- ROS1 Noetic
-- catkin isolated build
-- TRON1 机器人本体 SDK/驱动环境
-- Livox MID360 驱动
-- FAST-LIO localization 工程
-- Mapviz 与相关插件
+## 关键 ROS 接口
 
-常见 ROS 依赖可按实际系统补装：
+| Topic | 类型/用途 | 主要发布者 |
+|---|---|---|
+| `/gps/fix` | `sensor_msgs/NavSatFix` | GNSS bridge |
+| `/gps/course` | RMC 地面航迹角，仅作诊断 | GNSS bridge |
+| `/Odometry` | FAST-LIO 原始 odometry | `/laserMapping` |
+| `/livox/lidar_filter1` | `PointCloud2`，frame 通常为 `body` | FAST-LIO localization |
+| `/open_nav/odom` | ROS REP-103 map 融合位姿 | `gps_fastlio_fusion` |
+| `/open_nav/mission_path` | 已确认的全局任务路径 | mission manager |
+| `/open_nav/cmd_vel_raw` | waypoint tracker 原始速度 | `waypoint_tracker` |
+| `/open_nav/cmd_vel` | 最终安全速度 | `collision_safety` |
+| `/open_nav/obstacle_status` | `FREE/SLOW/STOP` | `collision_safety` |
+| `/open_nav/local_plan` | SHADOW 最优局部轨迹 | local planner |
+| `/open_nav/heading/status` | raw/nav/global 航向状态 | fusion |
 
-```bash
-sudo apt update
-sudo apt install -y \
-  ros-noetic-mapviz \
-  ros-noetic-mapviz-plugins \
-  ros-noetic-tf2-ros \
-  ros-noetic-tf2-geometry-msgs \
-  ros-noetic-visualization-msgs
-```
+完整 bringup 中 `/collision_safety` 必须是 `/open_nav/cmd_vel` 的唯一发布者；
+旧 `/lidar_obstacle_avoid` 会被禁用，但源码保留用于历史兼容。
 
-真实机器人使用 Livox MID360 时，还需要目标工作区中已有 `livox_ros_driver2`，因为 `/livox/lidar` 默认类型是 `livox_ros_driver2/CustomMsg`。
+## 构建
 
-## 部署到新机器人
-
-在目标机器人上：
-
-```bash
-cd ~
-git clone https://github.com/potatoHu-a/GPS-TRON1.git
-cd ~/GPS-TRON1/catkin_ws
-source /opt/ros/noetic/setup.bash
-catkin_make_isolated
-source devel_isolated/setup.bash
-```
-
-如果需要放回标准路径：
-
-```bash
-mkdir -p ~/catkin_ws/src
-rsync -a ~/GPS-TRON1/catkin_ws/src/ ~/catkin_ws/src/
-cd ~/catkin_ws
-source /opt/ros/noetic/setup.bash
-catkin_make_isolated
-source devel_isolated/setup.bash
-```
-
-## 启动顺序
-
-以下命令按当前现场网络写法整理。远程登录目标为：
-
-```bash
-ssh guest@10.192.1.3
-```
-
-密码请按现场机器人账户配置输入，不建议写入公开仓库。
-
-### 1. 开启 Livox MID360 雷达
-
-在机器人端 SSH 终端 1：
-
-```bash
-ssh guest@10.192.1.3
-cd ~/catkin_ws
-source /opt/ros/noetic/setup.bash
-source devel_isolated/setup.bash
-roslaunch livox_ros_driver2 msg_MID360.launch
-```
-
-### 2. 开启 FAST-LIO 重定位
-
-在机器人端 SSH 终端 2：
-
-```bash
-ssh guest@10.192.1.3
-cd ~/catkin_ws
-source /opt/ros/noetic/setup.bash
-source devel_isolated/setup.bash
-roslaunch fast_lio_localization_sc_qn run.launch lidar:=livox_mid360
-```
-
-### 3. 开启手机 GPS
-
-手机端打开 NetGPS，当前默认配置：
-
-- 手机 IP：`172.18.125.125`
-- TCP Port：`10110`
-- Sentence Output Interval：建议 `1000 ms`
-
-机器人端启动 GPS bridge：
+工程保持 `catkin_make_isolated`，不使用 `catkin_make`、`catkin build` 或
+`--install`：
 
 ```bash
 cd ~/catkin_ws
 source /opt/ros/noetic/setup.bash
-source devel_isolated/setup.bash
-roslaunch phone_gps_bridge netgps.launch
+catkin_make_isolated --force-cmake
 ```
 
-可检查：
+只重建本仓库关键包：
 
 ```bash
-rostopic echo /gps/fix
-rostopic echo /gps/heading
-rostopic echo /gps/magnetic_heading
-rostopic echo /gps/course
+catkin_make_isolated --pkg phone_gps_bridge --force-cmake
+catkin_make_isolated --pkg tron_open_space_nav --force-cmake
+catkin_make_isolated --pkg tron_sensor_bridge --force-cmake
+catkin_make_isolated --pkg tron_local_collision_safety --force-cmake
+catkin_make_isolated --pkg tron_local_trajectory_planner --force-cmake
+catkin_make_isolated --pkg tron_nav_dashboard --force-cmake
 ```
 
-### 4. 开启 GPS 全局导航
+不要连续 source 各包的 `setup.bash`。`catkin_make_isolated --pkg` 生成的 setup
+会重建自己的 underlay 链，可能使其他包从 `ROS_PACKAGE_PATH` 消失。
+所有运行脚本通过 `local_setup.bash` 和 `.catkin` marker 统一组合环境。
 
-首次部署和调试必须使用 `dry_run:=true`，确认 `/open_nav/cmd_vel` 正常后再考虑实机控制。
+## 部署到机器人
+
+机器人标准路径为 `/home/guest/catkin_ws`。从仓库副本部署时：
+
+```bash
+rsync -a --exclude='__pycache__/' --exclude='*.pyc' \
+  catkin_ws/src/ guest@10.192.1.3:/home/guest/catkin_ws/src/
+
+rsync -a \
+  catkin_ws/runtime_scripts/ \
+  guest@10.192.1.3:/home/guest/catkin_ws/runtime_scripts/
+```
+
+随后在机器人上重建修改过的包，并确保脚本可执行：
 
 ```bash
 cd ~/catkin_ws
 source /opt/ros/noetic/setup.bash
-source devel_isolated/setup.bash
-roslaunch tron_open_space_nav gps_global_nav.launch \
-  use_fake_gps:=false \
-  use_fake_fastlio:=false \
-  dry_run:=true
+catkin_make_isolated --pkg phone_gps_bridge --force-cmake
+catkin_make_isolated --pkg tron_open_space_nav --force-cmake
+catkin_make_isolated --pkg tron_sensor_bridge --force-cmake
+catkin_make_isolated --pkg tron_local_collision_safety --force-cmake
+catkin_make_isolated --pkg tron_local_trajectory_planner --force-cmake
+chmod +x ~/catkin_ws/runtime_scripts/*.sh
 ```
 
-### 5. 本地电脑开启 Mapviz/RViz 地面站
+## 启动
 
-在本地电脑或可访问 ROS master 的终端：
+### 推荐：统一 TEST bringup
+
+脚本不会启动第二个 `roscore`，机器人 ROS master 必须已存在：
 
 ```bash
-cd ~/catkin_ws
-source /opt/ros/noetic/setup.bash
-source devel_isolated/setup.bash
-roslaunch tron_open_space_nav mapviz_ground_station.launch \
-  tile_root:=/root/catkin_ws/src/tron_open_space_nav/maps/wuhan_tiles \
-  launch_mapviz:=true
+~/catkin_ws/runtime_scripts/start_full_bringup.sh test
 ```
 
-如果源码部署在普通用户目录，可把 `tile_root` 改成：
+该命令启动非 GUI 机器人组件：
+
+1. Livox 驱动
+2. FAST-LIO localization
+3. 南方 GNSS 串口接收
+4. GPS/FAST-LIO 融合与 waypoint 导航
+5. SHADOW local planner
+6. collision safety
+7. `dry_run=true` controller bridge
+
+检查完整链路：
 
 ```bash
-tile_root:=~/catkin_ws/src/tron_open_space_nav/maps/wuhan_tiles
+~/catkin_ws/runtime_scripts/check_full_bringup.sh
 ```
 
-## 关键话题
+### 分模块诊断
+
+每条命令都自动构造 ROS 环境，不需要预先 source：
+
+```bash
+~/catkin_ws/runtime_scripts/start_livox.sh
+~/catkin_ws/runtime_scripts/start_localization.sh
+~/catkin_ws/runtime_scripts/start_phone_gps.sh serial
+~/catkin_ws/runtime_scripts/start_gps_nav.sh
+~/catkin_ws/runtime_scripts/start_collision_safety.sh
+~/catkin_ws/runtime_scripts/check_runtime.sh
+```
+
+`start_localization.sh` 必须先于 collision safety，因为
+`/fast_lio_localization_sc_qn_node` 同时提供 TF 和
+`/livox/lidar_filter1`。
+
+其他 GNSS 模式：
+
+```bash
+~/catkin_ws/runtime_scripts/start_phone_gps.sh tcp
+~/catkin_ws/runtime_scripts/start_phone_gps.sh udp
+```
+
+南方 GNSS 默认串口：
 
 ```text
-/gps/fix                         sensor_msgs/NavSatFix
-/gps/heading                     std_msgs/Float64, true north heading
-/gps/magnetic_heading            std_msgs/Float64, magnetic heading diagnostic
-/gps/course                      std_msgs/Float64, RMC/VTG course when available
-
-/open_nav/cmd_vel_raw            waypoint_tracker 原始速度
-/open_nav/cmd_vel                避障层输出速度
-/open_nav/obstacle_status        tron_open_space_nav/ObstacleStatus
-/open_nav/obstacle_markers       visualization_msgs/MarkerArray
+/dev/serial/by-id/usb-1a86_USB_Single_Serial_5C84345474-if00
 ```
 
-## LiDAR 避障说明
+可用 `GNSS_SERIAL_DEVICE` 覆盖。应配置 `dialout`/udev 权限，不要把密码或
+长期 `chmod 666` 写进部署脚本。
 
-当前避障层不引入 `move_base`、DWA、TEB、Nav2 或全局 costmap。
+## Dashboard 与可视化
 
-处理链路：
+Dashboard 只在开发电脑/GPS-TRON1 容器运行：
+
+```bash
+/root/catkin_ws/runtime_scripts/start_nav_dashboard.sh
+```
+
+主要功能：
+
+- 中文自适应界面、离线武汉瓦片地图
+- GNSS、FAST-LIO、融合定位和任务路径
+- 地图选点、撤销、清空、确认、暂停、继续
+- `body` 局部 LiDAR 点云与完整过滤计数
+- SHADOW 候选轨迹和最优 local plan
+- collision safety 与速度链诊断
+- 人工绝对航向标定
+- 导航调试 rosbag 记录
+
+Dashboard 不发布 `/open_nav/cmd_vel` 或 `/open_nav/cmd_vel_raw`，只通过
+现有 collector 接口发布 `/open_nav/goal_add`。
+
+独立可视化入口：
+
+```bash
+~/catkin_ws/runtime_scripts/start_mapviz_navigation_test.sh
+~/catkin_ws/runtime_scripts/start_navigation_debug_rviz.sh
+```
+
+地图颜色：绿色 GNSS、青色 filtered GPS、黄色实际融合轨迹、蓝色任务路径、
+品红色 local plan、红色机器人融合姿态、灰色原始 FAST-LIO。
+
+## 坐标系与航向
+
+TRON1 当前 FAST-LIO `/Odometry` 的 `camera_init/body1` 使用 FRD：
 
 ```text
-waypoint_tracker
-  -> /open_nav/cmd_vel_raw
-  -> lidar_obstacle_avoid
-  -> /open_nav/cmd_vel
-  -> tron_controller_bridge
++X forward, +Y right, +Z down
 ```
 
-避障逻辑：
-
-- 点云 TF 到 `base_frame`，默认 `open_base`
-- 在 `open_base` 中按 `+X` 前、`+Y` 左、`+Z` 上处理
-- ROI 与高度过滤
-- `ground_z_max` 过滤地面点
-- footprint corridor：`robot_width / 2 + safety_margin`
-- 左/中/右三区统计 `min_distance`、`point_count`、`occupancy`
-- 状态机：`CLEAR`、`SLOW`、`AVOID_LEFT`、`AVOID_RIGHT`、`BLOCKED`、`SENSOR_TIMEOUT`
-- 点云超时进入 fail-safe 停车
-
-配置文件：
+导航 `body/open_base/map` 使用 ROS REP-103 FLU：
 
 ```text
-catkin_ws/src/tron_open_space_nav/config/obstacle_avoid.yaml
++X forward/east, +Y left/north, +Z up
 ```
 
-真实机器人默认：
+`gps_fastlio_fusion` 使用统一基变换 `S=diag(1,-1,-1)` 同时转换 translation、
+orientation、linear velocity 和 angular velocity。禁止只在 Dashboard 中把 yaw
+取反来掩盖底层错误。
+
+绝对航向由 session 级人工标定提供：
+
+```text
+yaw_offset = wrap(global_heading - normalized_fastlio_yaw)
+global_yaw = wrap(normalized_fastlio_yaw + yaw_offset)
+```
+
+FAST-LIO 重启、时间戳回退、序号重置或大幅位姿跳变后，状态自动回到
+`UNALIGNED`。REAL mission 在未标定时会被 Dashboard 阻止。
+
+## 碰撞安全策略
+
+`tron_local_collision_safety` 使用 `/livox/lidar_filter1`，默认局部 frame 为
+`body`。点云已经是 `body` 时直接处理，不经过错误的 `body -> open_base`
+千米级 TF。
+
+处理链：
+
+```text
+PointCloud2
+ -> finite/height/range/self filter
+ -> 0.05m local occupancy
+ -> footprint + braking envelope + forward corridor
+ -> trajectory collision check
+ -> FREE / SLOW / STOP
+```
+
+- `FREE`：完整透传 Twist
+- `SLOW`：所有速度分量同比缩放，保持方向和曲率
+- `STOP`：发布全零 Twist
+- 点云超时或 TF 失败：fail-safe `STOP`
+- 不自动左绕、右绕或改变 waypoint 目标
+
+为避免 TRON1 进入不可执行的低速踏步区，SLOW 前进输出下限默认为
+`0.35 m/s`；真正碰撞风险仍然直接 STOP。
+
+## 定位保护
+
+实机记录曾出现 FAST-LIO 几乎静止但 GNSS 漂移约 35m，旧融合逻辑累计约
+28m GPS correction。当前默认：
 
 ```yaml
-pointcloud_topic: /livox/lidar
-pointcloud_type: livox_custom
-base_frame: open_base
+stationary_correction_gain: 0.0
 ```
 
-如需接入已经转换好的 `sensor_msgs/PointCloud2`，可改为：
+FAST-LIO 判断静止时冻结 GPS correction，避免把静止 GNSS 漂移变成机器人
+运动；机器人运动时继续使用正常 correction gain。该保护不能替代 GNSS 数据
+质量检查。
 
-```yaml
-pointcloud_type: pointcloud2
-```
+## TEST 验收清单
 
-## NetGPS TCP 说明
-
-`phone_gps_bridge` 使用 TCP client 连接 NetGPS TCP server。
-
-默认配置：
-
-```text
-catkin_ws/src/phone_gps_bridge/config/netgps.yaml
-```
-
-特性：
-
-- 自动连接 `172.18.125.125:10110`
-- TCP 断开后自动重连
-- 接收超时不视为断线
-- TCP stream buffer 按完整 NMEA sentence 分句
-- 校验 NMEA checksum
-- GGA/RMC 发布 `/gps/fix`
-- HDT 发布 true north `/gps/heading`
-- HDG 发布诊断 `/gps/magnetic_heading`
-- RMC/VTG course 有效时发布 `/gps/course`
-
-## 常用验证命令
+在考虑 REAL 前至少确认：
 
 ```bash
+rostopic hz /livox/lidar
+rostopic hz /livox/imu
+rostopic hz /Odometry
+rostopic hz /livox/lidar_filter1
 rostopic hz /gps/fix
-rostopic hz /gps/heading
+rostopic hz /open_nav/odom
+rostopic echo /open_nav/heading/status
 rostopic echo /open_nav/obstacle_status
-rostopic echo /open_nav/cmd_vel
-rostopic echo /Odometry -n 1
-rostopic echo /livox/lidar/header -n 1
-rosrun tf tf_echo open_base livox_frame
+rostopic info /open_nav/cmd_vel
 ```
 
-## 安全提醒
+必须满足：
 
-- 初次部署保持 `dry_run:=true`
-- 不要在未确认 GPS、FAST-LIO、TF、雷达和避障状态前启动实机运动
-- 公开仓库不要提交机器人 SSH 密码、token、WiFi 密码或现场账号密钥
+- `/livox/lidar_filter1` 持续约 10Hz，不能长时间 timeout
+- `/Odometry` 持续更新
+- `/collision_safety` 是 `/open_nav/cmd_vel` 唯一发布者
+- `/lidar_obstacle_avoid` 未运行
+- 顺时针旋转时 normalized/global yaw 减小
+- 逆时针旋转时 normalized/global yaw 增加
+- 航向已人工标定且 Dashboard 箭头与物理方向一致
+- 空场 `FREE`、接近障碍 `SLOW`、碰撞风险 `STOP`
+- `controller_dry_run=true`
+
+## 当前已知问题
+
+截至当前版本仍未完成 REAL 验收：
+
+1. 最近实机日志中 `/livox/lidar_filter1` 曾连续超时 100 秒以上，必须先定位
+   FAST-LIO localization/点云发布中断原因。
+2. GNSS 静止测试存在几十米漂移；融合层已冻结静止 correction，但 GNSS 接收、
+   covariance、FIX 类型和多路径问题仍需单独处理。
+3. 新的 FRD -> FLU 航向转换已通过 bag、官方 TF 和单元测试，仍需部署后完成
+   物理顺/逆时针 TEST 验证。
+4. 静止检测当前主要参考 FAST-LIO `twist.linear.x`。若官方 twist 不可靠，后续应
+   与 pose 增量联合判断。
+5. 局部轨迹规划器仍为 SHADOW，不能接管控制。
+
+在上述问题关闭前，不要运行：
+
+```bash
+~/catkin_ws/runtime_scripts/start_full_bringup.sh real
+```
+
+## 离线测试
+
+```bash
+python3 catkin_ws/src/phone_gps_bridge/test/test_nmea_parser.py
+python3 catkin_ws/src/tron_open_space_nav/scripts/test_geodetic_utils.py
+python3 catkin_ws/src/tron_open_space_nav/scripts/test_fastlio_frame.py
+python3 catkin_ws/src/tron_open_space_nav/scripts/test_heading_alignment.py
+python3 catkin_ws/src/tron_nav_dashboard/scripts/test_dashboard_arrow.py
+```
+
+分析实机 bag：
+
+```bash
+python3 catkin_ws/src/tron_open_space_nav/scripts/analyze_heading_direction.py \
+  /path/to/tron_nav_YYYYMMDD_HHMMSS.bag
+```
+
+更详细的模块说明位于各 package 的 `README.md` 和
+`catkin_ws/src/tron_open_space_nav/docs/`。

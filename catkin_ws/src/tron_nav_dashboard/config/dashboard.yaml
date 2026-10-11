@@ -1,0 +1,27 @@
+tile_root: /root/catkin_ws/src/tron_open_space_nav/maps/wuhan_tiles
+language: zh_CN  # zh_CN: 中文界面，en_US: English
+# Initial size is capped to the available screen; the window remains freely
+# resizable after startup.
+window_width: 1580
+window_height: 900
+map_frame: map
+waypoint_goal_topic: /open_nav/goal_add
+waypoint_drag_threshold_px: 6.0
+mission_patrol_mode: once
+mission_loop_count: 0
+lidar_display_frame: body
+lidar_min_z: -0.4
+lidar_max_z: 1.0
+lidar_min_range: 0.1
+lidar_max_range: 8.0
+lidar_status_timeout: 1.0
+map_refresh_hz: 8.0
+lidar_refresh_hz: 5.0
+status_refresh_hz: 8.0
+raw_scatter_points: 200
+max_path_points: 3000
+path_decimation: 2
+lidar_max_points: 3500
+lidar_voxel_size: 0.10
+bag_directory: /root/catkin_ws/bags
+course_min_speed: 0.3

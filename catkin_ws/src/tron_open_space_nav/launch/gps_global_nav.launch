@@ -7,6 +7,7 @@
   <arg name="dry_run" default="true"/>
   <arg name="use_fake_gps" default="false"/>
   <arg name="use_fake_fastlio" default="false"/>
+  <arg name="use_legacy_obstacle_avoid" default="true"/>
   <arg name="use_rviz" default="false"/>
   <arg name="robot_config" default="$(find tron_open_space_nav)/config/robot.yaml"/>
   <arg name="robot_ws_url" default="ws://10.192.1.2:5000"/>
@@ -48,6 +49,7 @@
     <arg name="dry_run" value="$(arg dry_run)"/>
     <arg name="use_fake_gps" value="$(arg use_fake_gps)"/>
     <arg name="use_fake_fastlio" value="$(arg use_fake_fastlio)"/>
+    <arg name="use_legacy_obstacle_avoid" value="$(arg use_legacy_obstacle_avoid)"/>
     <arg name="fusion_config" value="$(find tron_open_space_nav)/config/global_fusion.yaml"/>
     <arg name="waypoint_config" value="$(find tron_open_space_nav)/config/global_waypoint.yaml"/>
     <arg name="obstacle_config" value="$(find tron_open_space_nav)/config/obstacle_avoid.yaml"/>

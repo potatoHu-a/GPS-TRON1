@@ -1,0 +1,10 @@
+# Speed-only tuning overlay for lidar_obstacle_avoid.
+# Loaded after the main obstacle config by open_nav.launch.
+# Defaults preserve the existing distance-based speed behavior.
+slow_distance: 2.0
+slowdown_factor: 0.35
+stop_distance: &stop_distance 0.8
+# The current hysteresis state machine enters BLOCKED at this threshold.
+# Keep the YAML alias tied to stop_distance when tuning this file.
+blocked_enter_distance: *stop_distance
+obstacle_speed_scale: 1.0

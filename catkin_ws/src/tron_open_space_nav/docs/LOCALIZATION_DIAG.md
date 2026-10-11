@@ -46,3 +46,10 @@
 - `gps_correction_gain: 0.15`（旧 alpha）
 
 或 git checkout 对应文件。
+## Stationary GPS drift protection
+
+`gps_fastlio_fusion` treats FAST-LIO speed below `stationary_speed` as
+stationary. In that state `stationary_correction_gain` defaults to `0.0`, so
+GPS noise cannot move `/open_nav/odom` while the robot is stopped. The
+diagnostic `gps_correction_distance` may remain nearly constant even when raw
+GPS wanders. Set a positive value only for a deliberate stationary calibration.

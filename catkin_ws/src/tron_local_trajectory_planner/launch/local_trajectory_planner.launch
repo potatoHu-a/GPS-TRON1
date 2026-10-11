@@ -1,0 +1,20 @@
+<launch>
+  <arg name="config_file"
+       default="$(find tron_local_trajectory_planner)/config/planner.yaml"/>
+  <arg name="rviz" default="false"/>
+
+  <node pkg="tron_local_trajectory_planner"
+        type="local_trajectory_planner.py"
+        name="local_trajectory_planner"
+        output="screen"
+        required="true">
+    <rosparam command="load" file="$(arg config_file)"/>
+  </node>
+
+  <node if="$(arg rviz)"
+        pkg="rviz"
+        type="rviz"
+        name="local_trajectory_planner_rviz"
+        output="screen"
+        args="-d $(find tron_local_trajectory_planner)/config/rviz/local_trajectory_planner.rviz"/>
+</launch>

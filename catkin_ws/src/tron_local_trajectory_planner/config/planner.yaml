@@ -1,0 +1,57 @@
+# Phase 1 is visualization-only. This node never publishes a Twist command.
+odom_topic: /open_nav/odom
+mission_path_topic: /open_nav/mission_path
+cloud_topic: /livox/lidar_filter1
+local_plan_topic: /open_nav/local_plan
+candidates_topic: /open_nav/local_plan_candidates
+status_topic: /open_nav/local_planner/status
+
+# Global mission/odometry geometry and local LiDAR planning geometry are
+# intentionally separate. PointCloud2 currently arrives in body.
+global_frame: map
+local_planning_frame: body
+planning_rate: 5.0
+odom_timeout: 0.5
+# Mission paths are latched and need not be republished periodically. Set a
+# positive timeout only when the upstream source is expected to stream updates.
+path_timeout: 0.0
+pointcloud_timeout: 0.8
+tf_timeout: 0.1
+
+prediction:
+  horizon: 2.5
+  dt: 0.1
+
+sampling:
+  min_linear_velocity: 0.0
+  max_linear_velocity: 0.5
+  linear_samples: 6
+  max_angular_velocity: 0.5
+  angular_samples: 11
+
+# Official TRON1 rectangular footprint.
+footprint:
+  length: 1.2
+  width: 0.5
+  safety_margin: 0.08
+
+obstacle_filter:
+  min_z: -0.4
+  max_z: 0.6
+  min_range: 0.1
+  max_range: 8.0
+  voxel_size: 0.10
+  max_points: 6000
+
+# Inflation contributes a graded score only. Collision uses footprint + margin.
+scoring:
+  obstacle_clearance: 0.45
+  goal_heading: 0.25
+  goal_progress: 0.20
+  smoothness: 0.10
+  desired_clearance: 0.8
+  local_goal_distance: 2.5
+
+markers:
+  lifetime: 0.35
+  line_width: 0.025

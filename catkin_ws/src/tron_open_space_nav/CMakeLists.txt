@@ -20,6 +20,7 @@ add_message_files(
   ObstacleStatus.msg
   WaypointInfo.msg
   WaypointInfoArray.msg
+  HeadingStatus.msg
 )
 
 add_service_files(
@@ -29,6 +30,7 @@ add_service_files(
   SetMeasuredDistance.srv
   DeleteWaypoint.srv
   MoveWaypoint.srv
+  SetHeadingAlignment.srv
 )
 
 generate_messages(
@@ -96,6 +98,8 @@ endif()
 
 catkin_install_python(PROGRAMS
   scripts/geodetic_utils.py
+  scripts/fastlio_frame.py
+  scripts/analyze_heading_direction.py
   scripts/gps_enu_converter.py
   scripts/gps_global_converter.py
   scripts/gps_waypoint_collector.py
@@ -117,10 +121,13 @@ catkin_install_python(PROGRAMS
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-install(PROGRAMS scripts/check_system.sh
+install(PROGRAMS
+  scripts/check_system.sh
+  scripts/start_gps_nav.sh
+  scripts/start_mapviz.sh
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-install(DIRECTORY launch config docs include
+install(DIRECTORY launch config docs include maps
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )

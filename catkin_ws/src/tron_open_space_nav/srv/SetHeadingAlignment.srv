@@ -1,0 +1,9 @@
+float64 yaw_offset
+float64 reference_distance
+string source
+---
+bool success
+string message
+float64 fastlio_yaw_rad
+float64 yaw_offset_rad
+float64 global_yaw_rad

@@ -1,0 +1,21 @@
+<launch>
+  <arg name="config"
+       default="$(find tron_open_space_nav)/config/rviz/mapviz_navigation_test.mvc"/>
+  <arg name="actual_path_topic" default="/open_nav/path"/>
+  <arg name="planned_path_topic" default="/open_nav/mission_path"/>
+  <arg name="launch_origin" default="false"/>
+
+  <node if="$(arg launch_origin)" pkg="swri_transform_util"
+        type="initialize_origin.py" name="mapviz_navigation_test_origin"
+        output="screen">
+    <rosparam file="$(find tron_open_space_nav)/config/mapviz_initialize_origin.yaml"
+              command="load"/>
+  </node>
+
+  <node pkg="mapviz" type="mapviz" name="mapviz_navigation_test" output="screen">
+    <param name="config" value="$(arg config)"/>
+    <param name="auto_save_backup" value="false"/>
+    <remap from="/open_nav/path" to="$(arg actual_path_topic)"/>
+    <remap from="/open_nav/mission_path" to="$(arg planned_path_topic)"/>
+  </node>
+</launch>

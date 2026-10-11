@@ -1,0 +1,15 @@
+<launch>
+  <arg name="device"
+       default="/dev/serial/by-id/usb-1a86_USB_Single_Serial_5C84345474-if00"/>
+  <arg name="baudrate" default="115200"/>
+
+  <node pkg="phone_gps_bridge"
+        type="serial_gnss_receiver.py"
+        name="serial_gnss_receiver"
+        output="screen"
+        required="true">
+    <rosparam file="$(find phone_gps_bridge)/config/serial_gnss.yaml" command="load"/>
+    <param name="device" value="$(arg device)"/>
+    <param name="baudrate" value="$(arg baudrate)"/>
+  </node>
+</launch>
